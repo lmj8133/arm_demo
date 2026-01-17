@@ -1,0 +1,421 @@
+"""Piper arm connection management.
+
+Provides PiperConnection class for managing CAN bus connection,
+slave mode configuration, and arm enable/disable.
+"""
+
+import time
+from typing import Optional
+from contextlib import contextmanager
+
+from piper_sdk import C_PiperInterface_V2
+
+from .utils import check_can_interface
+
+
+class PiperConnectionError(Exception):
+    """Exception raised for connection-related errors."""
+    pass
+
+
+class PiperConnection:
+    """Context manager for Piper arm connection.
+
+    Handles CAN connection, slave mode setup, and cleanup.
+    Uses C_PiperInterface_V2 for gripper control compatibility.
+
+    Example:
+        with PiperConnection(can_name="can0") as conn:
+            print(conn.piper.GetArmJointMsgs())
+
+    Attributes:
+        piper: The underlying C_PiperInterface_V2 instance
+        can_name: CAN interface name
+        is_connected: Whether currently connected
+    """
+
+    # Slave mode command for reading feedback
+    SLAVE_MODE_CMD = 0xFC
+
+    # Home position: all joints at 0 radians (used on enable)
+    HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    # Safe home position: resting pose for disable (J5 at ~21.7 degrees)
+    SAFE_HOME_POSITION = [0.00175, -0.0419, 0.0367, -0.00524, 0.3787, 0.0]
+
+    # Conversion factor: radians to milli-degrees (1000 * 180 / pi)
+    RAD_TO_MILLIDEG = 57295.7795
+
+    def __init__(
+        self,
+        can_name: str = "can0",
+        auto_slave_mode: bool = False,
+        verify_can: bool = True,
+    ):
+        """Initialize PiperConnection.
+
+        Args:
+            can_name: CAN interface name (default: "can0")
+            auto_slave_mode: Automatically set slave mode on connect (default: False).
+                             Note: Slave mode may interfere with motion control commands.
+                             Set to True only when reading feedback without motion control.
+            verify_can: Verify CAN interface before connecting (default: True)
+        """
+        self.can_name = can_name
+        self.auto_slave_mode = auto_slave_mode
+        self.verify_can = verify_can
+
+        self.piper: Optional[C_PiperInterface_V2] = None
+        self.is_connected = False
+        self._enabled = False
+
+    def connect(self) -> "PiperConnection":
+        """Establish connection to the Piper arm.
+
+        Returns:
+            self for method chaining
+
+        Raises:
+            PiperConnectionError: If CAN interface not available or connection fails
+        """
+        if self.is_connected:
+            return self
+
+        # Verify CAN interface is active
+        if self.verify_can and not check_can_interface(self.can_name):
+            raise PiperConnectionError(
+                f"CAN interface '{self.can_name}' is not active. "
+                f"Run: bash scripts/can_activate.sh {self.can_name} 1000000"
+            )
+
+        try:
+            self.piper = C_PiperInterface_V2(self.can_name)
+            self.piper.ConnectPort()
+            self.is_connected = True
+
+            # Set slave mode to enable feedback
+            if self.auto_slave_mode:
+                self.set_slave_mode()
+
+            # Small delay for first CAN messages
+            time.sleep(0.1)
+
+        except Exception as e:
+            self.is_connected = False
+            raise PiperConnectionError(f"Failed to connect to Piper arm: {e}") from e
+
+        return self
+
+    def disconnect(self) -> None:
+        """Disconnect from the Piper arm.
+
+        Uses safe_disable() to return arm to home position before
+        disabling motors, preventing gravity-induced falls.
+        """
+        if self._enabled:
+            try:
+                self.safe_disable(return_home=True)
+            except Exception:
+                # Fallback: direct disable if safe_disable fails
+                try:
+                    self.piper.DisableArm(7)
+                except Exception:
+                    pass
+
+        self.is_connected = False
+        self.piper = None
+
+    def set_slave_mode(self) -> None:
+        """Set arm to slave mode for reading feedback.
+
+        Must be called before reading joint positions.
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        self.piper.MasterSlaveConfig(self.SLAVE_MODE_CMD, 0, 0, 0)
+
+    def reset(self) -> None:
+        """Reset arm from teaching/MIT mode to position-velocity mode.
+
+        Use this when arm is stuck in TEACHING_MODE and won't respond to commands.
+        Sends MotionCtrl_1 with ctrl_mode=0x02 (exit teaching/MIT mode).
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        self.piper.MotionCtrl_1(0x02, 0, 0)
+        time.sleep(0.2)
+
+    def set_control_mode(
+        self,
+        move_mode: int = 0x01,
+        speed_percent: int = 30,
+    ) -> None:
+        """Switch arm to CAN control mode with specified move mode.
+
+        Must be called after enable() to allow motion commands to work.
+
+        Args:
+            move_mode: Motion mode (0x00=MOVE_P, 0x01=MOVE_J, 0x02=MOVE_L)
+            speed_percent: Speed 0-100 (default: 30)
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        # ctrl_mode=0x01 (CAN_CTRL), move_mode, speed, mit_mode=0x00
+        self.piper.MotionCtrl_2(0x01, move_mode, speed_percent, 0x00)
+        time.sleep(0.1)
+
+    def _move_to_home_and_wait(
+        self,
+        speed: int = 20,
+        timeout_sec: float = 15.0,
+        tolerance_millideg: int = 2000,
+    ) -> bool:
+        """Move to home position and wait for completion.
+
+        Args:
+            speed: Speed percentage (0-100)
+            timeout_sec: Timeout for motion
+            tolerance_millideg: Position tolerance in 0.001 degrees
+
+        Returns:
+            True if home position reached within timeout
+        """
+        # Send home command
+        joints = [round(p * self.RAD_TO_MILLIDEG) for p in self.HOME_POSITION]
+        self.piper.MotionCtrl_2(0x01, 0x01, speed, 0x00)  # CAN ctrl, MOVE_J
+        self.piper.JointCtrl(*joints)
+
+        # Wait for position with feedback
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            joint_msg = self.piper.GetArmJointMsgs()
+            positions = [
+                joint_msg.joint_state.joint_1,
+                joint_msg.joint_state.joint_2,
+                joint_msg.joint_state.joint_3,
+                joint_msg.joint_state.joint_4,
+                joint_msg.joint_state.joint_5,
+                joint_msg.joint_state.joint_6,
+            ]
+
+            if all(abs(pos) <= tolerance_millideg for pos in positions):
+                return True
+
+            time.sleep(0.1)
+
+        return False
+
+    def _move_to_safe_home_and_wait(
+        self,
+        speed: int = 20,
+        timeout_sec: float = 15.0,
+        tolerance_millideg: int = 3000,
+    ) -> bool:
+        """Move to safe home position and wait for completion.
+
+        Args:
+            speed: Speed percentage (0-100)
+            timeout_sec: Timeout for motion
+            tolerance_millideg: Position tolerance in 0.001 degrees
+
+        Returns:
+            True if safe home position reached within timeout
+        """
+        # Send safe home command
+        joints = [round(p * self.RAD_TO_MILLIDEG) for p in self.SAFE_HOME_POSITION]
+        self.piper.MotionCtrl_2(0x01, 0x01, speed, 0x00)  # CAN ctrl, MOVE_J
+        self.piper.JointCtrl(*joints)
+
+        # Wait for position with feedback
+        targets = [round(p * self.RAD_TO_MILLIDEG) for p in self.SAFE_HOME_POSITION]
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            joint_msg = self.piper.GetArmJointMsgs()
+            positions = [
+                joint_msg.joint_state.joint_1,
+                joint_msg.joint_state.joint_2,
+                joint_msg.joint_state.joint_3,
+                joint_msg.joint_state.joint_4,
+                joint_msg.joint_state.joint_5,
+                joint_msg.joint_state.joint_6,
+            ]
+
+            if all(abs(pos - tgt) <= tolerance_millideg for pos, tgt in zip(positions, targets)):
+                return True
+
+            time.sleep(0.1)
+
+        return False
+
+    def enable(
+        self,
+        timeout_sec: float = 5.0,
+        force: bool = False,
+        auto_reset: bool = True,
+        auto_control_mode: bool = True,
+        move_mode: int = 0x01,
+        speed_percent: int = 30,
+        go_home: bool = True,
+        home_settle_sec: float = 1.0,
+        home_speed: int = 20,
+        home_timeout_sec: float = 15.0,
+    ) -> bool:
+        """Enable the arm motors using V2 EnablePiper.
+
+        By default, this method will:
+        1. Reset arm to ensure controllable state
+        2. Call EnablePiper to enable motors
+        3. Auto-switch to CAN control mode for motion commands
+        4. Move to home position (all joints at 0)
+
+        Args:
+            timeout_sec: Timeout for enable operation
+            force: Force enable even if already enabled (default: False)
+            auto_reset: Reset arm before enabling (default: True)
+            auto_control_mode: Auto-switch to CAN control mode (default: True)
+            move_mode: Default move mode for auto_control_mode
+                       (0x00=MOVE_P, 0x01=MOVE_J, 0x02=MOVE_L, default: MOVE_J)
+            speed_percent: Default speed for auto_control_mode (default: 30)
+            go_home: Move to home position after enabling (default: True)
+            home_settle_sec: Settle time after homing motion (default: 1.0)
+            home_speed: Speed percentage for homing motion (default: 20)
+            home_timeout_sec: Timeout for homing motion (default: 15.0)
+
+        Returns:
+            True if enabled successfully
+
+        Raises:
+            PiperConnectionError: If not connected or enable fails
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        # Auto-reset to ensure arm is in a controllable state
+        if auto_reset:
+            self.reset()
+
+        # Check if already enabled to avoid unnecessary re-enable
+        # SDK's EnablePiper() sends EnableArm(7) every call which may reset state
+        if not force:
+            enable_status = self.piper.GetArmEnableStatus()
+            if all(enable_status):
+                self._enabled = True
+                # Still need to set control mode if requested
+                if auto_control_mode:
+                    self.set_control_mode(move_mode, speed_percent)
+                # Move to home if requested (default: True)
+                if go_home:
+                    self._move_to_home_and_wait(home_speed, home_timeout_sec)
+                    time.sleep(home_settle_sec)
+                return True
+
+        # V2 API: poll EnablePiper() until it returns True
+        start_time = time.time()
+        while not self.piper.EnablePiper():
+            if time.time() - start_time > timeout_sec:
+                raise PiperConnectionError(
+                    f"Failed to enable arm within {timeout_sec}s"
+                )
+            time.sleep(0.01)
+
+        # Switch to CAN control mode
+        if auto_control_mode:
+            self.set_control_mode(move_mode, speed_percent)
+
+        # Move to home if requested (default: True)
+        if go_home:
+            self._move_to_home_and_wait(home_speed, home_timeout_sec)
+            time.sleep(home_settle_sec)
+
+        self._enabled = True
+        return True
+
+    def disable(self) -> None:
+        """Disable the arm motors.
+
+        Warning: This immediately disables motors, which may cause the arm
+        to fall due to gravity. Use safe_disable() for controlled shutdown.
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        self.piper.DisableArm(7)  # Disable all joints
+        self._enabled = False
+
+    def safe_disable(
+        self,
+        return_home: bool = True,
+        home_speed: int = 20,
+        timeout_sec: float = 15.0,
+        settle_sec: float = 1.0,
+    ) -> None:
+        """Safely disable arm by returning to safe home position first.
+
+        This prevents the arm from falling due to gravity when motors
+        are disabled. The sequence is:
+        1. Move to safe home position (SAFE_HOME_POSITION) with position detection
+        2. Wait for settle time after reaching position
+        3. Switch to standby mode (holds position)
+        4. Disable motors
+
+        Args:
+            return_home: Move to home position before disable (default: True)
+            home_speed: Speed percentage for homing motion (default: 20)
+            timeout_sec: Timeout for homing motion (default: 15.0)
+            settle_sec: Settle time after reaching safe home (default: 1.0)
+
+        Raises:
+            PiperConnectionError: If not connected to the arm
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        if return_home and self._enabled:
+            # Step 1: Move to safe home position with position detection
+            self._move_to_safe_home_and_wait(home_speed, timeout_sec)
+
+            # Step 2: Settle time after reaching position
+            time.sleep(settle_sec)
+
+        # Step 3: Switch to standby mode (holds position)
+        self.piper.MotionCtrl_2(0x00, 0x00, 0, 0x00)
+        time.sleep(0.3)
+
+        # Step 4: Disable motors
+        self.piper.DisableArm(7)
+        self._enabled = False
+
+    @property
+    def enabled(self) -> bool:
+        """Check if arm is currently enabled."""
+        return self._enabled
+
+    def __enter__(self) -> "PiperConnection":
+        """Enter context manager - connect to arm."""
+        return self.connect()
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit context manager - disconnect from arm."""
+        self.disconnect()
+
+    def __repr__(self) -> str:
+        status = "connected" if self.is_connected else "disconnected"
+        return f"PiperConnection(can_name='{self.can_name}', status={status})"
+
+
+@contextmanager
+def piper_connection(can_name: str = "can0", **kwargs):
+    """Convenience context manager for Piper connection.
+
+    Example:
+        with piper_connection("can0") as conn:
+            print(conn.piper.GetArmJointMsgs())
+    """
+    conn = PiperConnection(can_name=can_name, **kwargs)
+    try:
+        yield conn.connect()
+    finally:
+        conn.disconnect()
