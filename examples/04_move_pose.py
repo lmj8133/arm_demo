@@ -1,31 +1,18 @@
 #!/usr/bin/env python3
-"""Example 04: Cartesian pose movement with relative offsets.
+"""Example 04: Cartesian pose movement.
 
-This example demonstrates how to move the end-effector using
-relative offsets from the current position. The target position
-is computed as: target = current_position + offset.
+This example demonstrates how to move the end-effector
+to a Cartesian position with pose feedback.
 
 Usage:
     # First, activate CAN bus
     bash scripts/can_activate.sh can0 1000000
 
-    # Move X axis forward by 0.1m, keep Y/Z unchanged
-    uv run python examples/04_move_pose.py --x 0.1
-
-    # Keep current position, only change orientation
-    uv run python examples/04_move_pose.py --roll 45
-
-    # Move X and Z simultaneously
-    uv run python examples/04_move_pose.py --x 0.1 --z -0.05
-
-    # No movement (all offsets are 0, stays at current position)
-    uv run python examples/04_move_pose.py
+    # Move to a Cartesian position (uses continuous mode by default)
+    uv run python examples/04_move_pose.py --x 0.3 --y 0.0 --z 0.2
 
     # Use single command mode (without continuous feedback)
-    uv run python examples/04_move_pose.py --x 0.1 --no-continuous
-
-    # Use Jacobian-based IK instead of SDK's EndPoseCtrl
-    uv run python examples/04_move_pose.py --x 0.1 --use-ik
+    uv run python examples/04_move_pose.py --x 0.3 --y 0.0 --z 0.2 --no-continuous
 
 WARNING: This will physically move the robot arm!
          Ensure the workspace is clear before running.
@@ -52,16 +39,13 @@ def main():
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--x", type=float, default=None,
-        help="X offset from current position in meters (default: 0)"
+        "--x", type=float, required=True, help="X position in meters"
     )
     parser.add_argument(
-        "--y", type=float, default=None,
-        help="Y offset from current position in meters (default: 0)"
+        "--y", type=float, required=True, help="Y position in meters"
     )
     parser.add_argument(
-        "--z", type=float, default=None,
-        help="Z offset from current position in meters (default: 0)"
+        "--z", type=float, required=True, help="Z position in meters"
     )
     parser.add_argument(
         "--roll", type=float, default=None, help="Roll angle in degrees (default: current)"
@@ -92,53 +76,30 @@ def main():
         "--verbose", "-v", action="store_true",
         help="Print pose updates during motion"
     )
-    parser.add_argument(
-        "--use-ik", action="store_true",
-        help="Use Jacobian-based IK instead of SDK's EndPoseCtrl"
-    )
     args = parser.parse_args()
+
+    print(f"[INFO] Target position: ({args.x:.3f}, {args.y:.3f}, {args.z:.3f}) m")
+    print(f"       Speed factor: {args.speed}")
+    mode_str = "Single command" if args.no_continuous else f"Continuous (settle: {args.settle}s)"
+    print(f"       Mode: {mode_str}")
+    print(f"[WARN] The arm will move! Ensure workspace is clear.")
+    print()
 
     try:
         with PiperConnection(can_name=args.can) as conn:
             reader = JointReader(conn.piper)
             motion = MotionController(conn.piper, speed_factor=args.speed)
 
-            # Enable arm
-            print("[INFO] Enabling arm (moving to home position)...")
-            conn.enable()
-            print("[OK] Arm enabled and at home position")
-            print()
-
-            # Read pose AFTER enable
+            # Read current joint state
             state = reader.read_joints()
-            print("[INFO] Current joint state (at home):")
+            print(f"[INFO] Current joint state:")
             print(state)
             print()
 
+            # Read current end-effector pose
             pose = reader.read_end_pose()
-            print("[INFO] Current end-effector pose (at home):")
+            print(f"[INFO] Current end-effector pose:")
             print(pose)
-            print()
-
-            # Compute target position (current + offset)
-            current_x, current_y, current_z = pose.x, pose.y, pose.z
-
-            offset_x = args.x if args.x is not None else 0.0
-            offset_y = args.y if args.y is not None else 0.0
-            offset_z = args.z if args.z is not None else 0.0
-
-            target_x = current_x + offset_x
-            target_y = current_y + offset_y
-            target_z = current_z + offset_z
-
-            print(f"[INFO] Target position: ({target_x:.3f}, {target_y:.3f}, {target_z:.3f}) m")
-            print(f"       (Current: {current_x:.3f}, {current_y:.3f}, {current_z:.3f})")
-            print(f"       (Offset:  {offset_x:+.3f}, {offset_y:+.3f}, {offset_z:+.3f})")
-            print(f"       Speed factor: {args.speed}")
-            ik_str = " + IK" if args.use_ik else ""
-            mode_str = f"Single command{ik_str}" if args.no_continuous else f"Continuous{ik_str} (settle: {args.settle}s)"
-            print(f"       Mode: {mode_str}")
-            print("[WARN] The arm will move! Ensure workspace is clear.")
             print()
 
             # Use current orientation if not specified
@@ -149,8 +110,13 @@ def main():
 
             print(f"[INFO] Target orientation: (R:{roll_deg:.1f}°, P:{pitch_deg:.1f}°, Y:{yaw_deg:.1f}°)")
             if args.roll is None or args.pitch is None or args.yaw is None:
-                print("       (Using current values for unspecified orientation)")
+                print(f"       (Using current values for unspecified orientation)")
             print()
+
+            # Enable arm (auto moves to home position)
+            print("[INFO] Enabling arm (moving to home position)...")
+            conn.enable()
+            print("[OK] Arm enabled and at home position")
 
             # Convert target orientation to radians
             roll_rad = deg_to_rad(roll_deg)
@@ -171,32 +137,18 @@ def main():
                         x_mm, y_mm, z_mm = current_pose.position_mm()
                         print(f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm")
 
-                if args.use_ik:
-                    reached = motion.move_cartesian_ik_continuous(
-                        x=target_x,
-                        y=target_y,
-                        z=target_z,
-                        roll=roll_rad,
-                        pitch=pitch_rad,
-                        yaw=yaw_rad,
-                        speed_factor=args.speed,
-                        timeout_sec=args.timeout,
-                        settle_sec=args.settle,
-                        pose_callback=pose_callback if args.verbose else None,
-                    )
-                else:
-                    reached = motion.move_cartesian_continuous(
-                        x=target_x,
-                        y=target_y,
-                        z=target_z,
-                        roll=roll_rad,
-                        pitch=pitch_rad,
-                        yaw=yaw_rad,
-                        speed_factor=args.speed,
-                        timeout_sec=args.timeout,
-                        settle_sec=args.settle,
-                        pose_callback=pose_callback if args.verbose else None,
-                    )
+                reached = motion.move_cartesian_continuous(
+                    x=args.x,
+                    y=args.y,
+                    z=args.z,
+                    roll=roll_rad,
+                    pitch=pitch_rad,
+                    yaw=yaw_rad,
+                    speed_factor=args.speed,
+                    timeout_sec=args.timeout,
+                    settle_sec=args.settle,
+                    pose_callback=pose_callback if args.verbose else None,
+                )
 
                 if reached:
                     print("[INFO] Target pose reached!")
@@ -206,37 +158,22 @@ def main():
             else:
                 # Use single command mode (original behavior)
                 print("[INFO] Moving to target pose (single command)...")
-                if args.use_ik:
-                    success = motion.move_cartesian_ik(
-                        x=target_x,
-                        y=target_y,
-                        z=target_z,
-                        roll=roll_rad,
-                        pitch=pitch_rad,
-                        yaw=yaw_rad,
-                        speed_factor=args.speed,
-                    )
-                    if success:
-                        print("[INFO] IK solution found and joint command sent")
-                    else:
-                        print("[WARN] IK failed to find a valid solution")
-                else:
-                    motion.move_cartesian(
-                        x=target_x,
-                        y=target_y,
-                        z=target_z,
-                        roll=roll_rad,
-                        pitch=pitch_rad,
-                        yaw=yaw_rad,
-                        speed_factor=args.speed,
-                    )
+                motion.move_cartesian(
+                    x=args.x,
+                    y=args.y,
+                    z=args.z,
+                    roll=roll_rad,
+                    pitch=pitch_rad,
+                    yaw=yaw_rad,
+                    speed_factor=args.speed,
+                )
 
                 # Wait for motion using pose feedback
                 print("[INFO] Waiting for motion to complete...")
                 reached = reader.wait_for_pose(
-                    target_x=target_x,
-                    target_y=target_y,
-                    target_z=target_z,
+                    target_x=args.x,
+                    target_y=args.y,
+                    target_z=args.z,
                     target_roll=roll_rad,
                     target_pitch=pitch_rad,
                     target_yaw=yaw_rad,
@@ -250,7 +187,7 @@ def main():
 
             # Read final pose
             final_pose = reader.read_end_pose()
-            print("\n[INFO] Final end-effector pose:")
+            print(f"\n[INFO] Final end-effector pose:")
             print(final_pose)
 
             # Safely disable arm (returns to home first)
