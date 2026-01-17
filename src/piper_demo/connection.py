@@ -144,17 +144,65 @@ class PiperConnection:
 
         self.piper.MasterSlaveConfig(self.SLAVE_MODE_CMD, 0, 0, 0)
 
-    def reset(self) -> None:
-        """Reset arm from teaching/MIT mode to position-velocity mode.
+    def get_ctrl_mode(self) -> int:
+        """Get current control mode.
 
-        Use this when arm is stuck in TEACHING_MODE and won't respond to commands.
-        Sends MotionCtrl_1 with ctrl_mode=0x02 (exit teaching/MIT mode).
+        Returns:
+            ctrl_mode: 0x00=Standby, 0x01=CAN_CTRL, 0x02=TEACHING_MODE
         """
         if not self.is_connected or self.piper is None:
             raise PiperConnectionError("Not connected to Piper arm")
 
-        self.piper.MotionCtrl_1(0x02, 0, 0)
-        time.sleep(0.2)
+        status = self.piper.GetArmStatus()
+        ctrl_mode = status.arm_status.ctrl_mode
+        # Handle enum type from SDK
+        return ctrl_mode.value if hasattr(ctrl_mode, 'value') else int(ctrl_mode)
+
+    def is_in_teaching_mode(self) -> bool:
+        """Check if arm is currently in teaching mode."""
+        try:
+            return self.get_ctrl_mode() == 0x02
+        except Exception:
+            return False
+
+    def reset(self, max_retries: int = 3, delay_sec: float = 0.3) -> None:
+        """Reset arm from teaching/MIT mode to position-velocity mode.
+
+        Use this when arm is stuck in TEACHING_MODE and won't respond to commands.
+        Sequence: DisableArm -> MotionCtrl_1 (exit teaching) -> MotionCtrl_2 (CAN mode).
+        Retries if still in teaching mode.
+
+        Args:
+            max_retries: Maximum number of reset attempts (default: 3)
+            delay_sec: Delay between commands for state transition (default: 0.3)
+        """
+        if not self.is_connected or self.piper is None:
+            raise PiperConnectionError("Not connected to Piper arm")
+
+        for _attempt in range(max_retries):
+            # Step 1: Disable arm first to reset state
+            self.piper.DisableArm(7)
+            time.sleep(delay_sec)
+
+            # Step 2: Exit drag teaching mode AND resume from emergency stop
+            self.piper.MotionCtrl_1(0x02, 0, 0x02)
+            time.sleep(delay_sec)
+
+            # Step 3: Switch to CAN control mode (MIT mode off)
+            self.piper.MotionCtrl_2(0x01, 0x01, 30, 0x00)
+            time.sleep(delay_sec)
+
+            # Verify we exited teaching mode
+            if not self.is_in_teaching_mode():
+                return  # Success
+
+        # Final attempt without verification (best effort)
+        self.piper.DisableArm(7)
+        time.sleep(delay_sec)
+        self.piper.MotionCtrl_1(0x02, 0, 0x02)
+        time.sleep(delay_sec)
+        self.piper.MotionCtrl_2(0x01, 0x01, 30, 0x00)
+        time.sleep(delay_sec)
 
     def set_control_mode(
         self,
