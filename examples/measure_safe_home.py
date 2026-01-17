@@ -15,7 +15,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from piper_demo import PiperConnection, JointReader
+from piper_demo import PiperConnection, JointReader, forward_kinematics
 
 
 def main():
@@ -52,6 +52,31 @@ def main():
         print("Copy this line to connection.py:")
         print("=" * 60)
         print(f"SAFE_HOME_POSITION = {rounded}")
+        print("=" * 60)
+
+        # Calculate XYZ offset from HOME_POSITION using forward kinematics
+        home_fk = forward_kinematics(PiperConnection.HOME_POSITION)
+        home_xyz = home_fk.position_mm()  # (x, y, z) in mm
+        current_xyz = (pose.x * 1000, pose.y * 1000, pose.z * 1000)
+
+        offset_x = current_xyz[0] - home_xyz[0]
+        offset_y = current_xyz[1] - home_xyz[1]
+        offset_z = current_xyz[2] - home_xyz[2]
+
+        print("\n" + "=" * 60)
+        print("XYZ Offset from HOME_POSITION (current - home):")
+        print("=" * 60)
+        sign_x = "+" if offset_x >= 0 else ""
+        sign_y = "+" if offset_y >= 0 else ""
+        sign_z = "+" if offset_z >= 0 else ""
+        print(f"  dX = {sign_x}{offset_x:.2f} mm")
+        print(f"  dY = {sign_y}{offset_y:.2f} mm")
+        print(f"  dZ = {sign_z}{offset_z:.2f} mm")
+
+        print("\nCopy-paste ready (mm):")
+        print(f"XYZ_OFFSET = ({offset_x:.2f}, {offset_y:.2f}, {offset_z:.2f})")
+
+        print(f"\nReference HOME XYZ (from FK): ({home_xyz[0]:.2f}, {home_xyz[1]:.2f}, {home_xyz[2]:.2f}) mm")
         print("=" * 60)
 
     return 0
