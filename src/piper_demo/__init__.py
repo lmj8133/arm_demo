@@ -17,6 +17,8 @@ from .joint_reader import JointReader, JointState, EndPoseState
 from .motion import MotionController
 from .gripper import GripperController
 from .kinematics import forward_kinematics, FKResult
+from .jacobian import compute_jacobian, is_near_singularity
+from .inverse_kinematics import inverse_kinematics, IKResult, IKConfig, pose_to_matrix
 from .utils import check_can_interface, deg_to_rad, rad_to_deg, format_end_pose
 
 __all__ = [
@@ -28,6 +30,12 @@ __all__ = [
     "GripperController",
     "forward_kinematics",
     "FKResult",
+    "compute_jacobian",
+    "is_near_singularity",
+    "inverse_kinematics",
+    "IKResult",
+    "IKConfig",
+    "pose_to_matrix",
     "check_can_interface",
     "deg_to_rad",
     "rad_to_deg",
