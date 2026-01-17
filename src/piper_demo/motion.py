@@ -8,6 +8,7 @@ from typing import Callable, List, Optional, Tuple
 
 from piper_sdk import C_PiperInterface_V2
 
+from .connection import PiperConnection
 from .utils import (
     clamp_joint_position,
     validate_joint_positions,
@@ -30,9 +31,6 @@ class MotionController:
         motion.move_to_home()
         motion.move_joint([0.1, 0.5, -0.3, 0.0, 0.0, 0.0])
     """
-
-    # Home position (all joints at 0)
-    HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     # Default speed factor (0.0 to 1.0)
     DEFAULT_SPEED_FACTOR = 0.3
@@ -140,7 +138,7 @@ class MotionController:
             raise MotionError(f"Invalid joint index: {joint_index}")
 
         # Get current joint command (or use zeros as baseline)
-        positions = self.HOME_POSITION.copy()
+        positions = PiperConnection.HOME_POSITION.copy()
         positions[joint_index] = position
         self.move_joint(positions, speed_factor)
 
@@ -152,7 +150,7 @@ class MotionController:
         """
         # Use slower speed for homing
         home_speed = speed_factor if speed_factor is not None else 0.2
-        self.move_joint(self.HOME_POSITION, home_speed)
+        self.move_joint(PiperConnection.HOME_POSITION, home_speed)
 
     def move_cartesian(
         self,
@@ -246,7 +244,7 @@ class MotionController:
             )
         """
         import math
-        from .joint_reader import JointReader, EndPoseState
+        from .joint_reader import JointReader
 
         speed = speed_factor if speed_factor is not None else self.speed_factor
         speed_value = int(speed * 100)
@@ -269,7 +267,7 @@ class MotionController:
             while time.time() - start_time < timeout_sec:
                 loop_start = time.time()
 
-                # Send motion command continuously (SDK requirement)
+                # Use Cartesian P2P (0x00) - same as move_cartesian()
                 self.piper.MotionCtrl_2(0x01, 0x00, speed_value, 0x00)
                 self.piper.EndPoseCtrl(
                     x_001mm, y_001mm, z_001mm,
