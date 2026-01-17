@@ -48,13 +48,13 @@ def main():
         "--z", type=float, required=True, help="Z position in meters"
     )
     parser.add_argument(
-        "--roll", type=float, default=0.0, help="Roll angle in degrees (default: 0)"
+        "--roll", type=float, default=None, help="Roll angle in degrees (default: current)"
     )
     parser.add_argument(
-        "--pitch", type=float, default=0.0, help="Pitch angle in degrees (default: 0)"
+        "--pitch", type=float, default=None, help="Pitch angle in degrees (default: current)"
     )
     parser.add_argument(
-        "--yaw", type=float, default=0.0, help="Yaw angle in degrees (default: 0)"
+        "--yaw", type=float, default=None, help="Yaw angle in degrees (default: current)"
     )
     parser.add_argument(
         "--speed", type=float, default=0.2,
@@ -78,9 +78,7 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"[INFO] Target pose:")
-    print(f"       Position: ({args.x:.3f}, {args.y:.3f}, {args.z:.3f}) m")
-    print(f"       Orientation: (R:{args.roll:.1f}°, P:{args.pitch:.1f}°, Y:{args.yaw:.1f}°)")
+    print(f"[INFO] Target position: ({args.x:.3f}, {args.y:.3f}, {args.z:.3f}) m")
     print(f"       Speed factor: {args.speed}")
     mode_str = "Single command" if args.no_continuous else f"Continuous (settle: {args.settle}s)"
     print(f"       Mode: {mode_str}")
@@ -104,15 +102,26 @@ def main():
             print(pose)
             print()
 
+            # Use current orientation if not specified
+            current_roll_deg, current_pitch_deg, current_yaw_deg = pose.orientation_deg()
+            roll_deg = args.roll if args.roll is not None else current_roll_deg
+            pitch_deg = args.pitch if args.pitch is not None else current_pitch_deg
+            yaw_deg = args.yaw if args.yaw is not None else current_yaw_deg
+
+            print(f"[INFO] Target orientation: (R:{roll_deg:.1f}°, P:{pitch_deg:.1f}°, Y:{yaw_deg:.1f}°)")
+            if args.roll is None or args.pitch is None or args.yaw is None:
+                print(f"       (Using current values for unspecified orientation)")
+            print()
+
             # Enable arm (auto moves to home position)
             print("[INFO] Enabling arm (moving to home position)...")
             conn.enable()
             print("[OK] Arm enabled and at home position")
 
             # Convert target orientation to radians
-            roll_rad = deg_to_rad(args.roll)
-            pitch_rad = deg_to_rad(args.pitch)
-            yaw_rad = deg_to_rad(args.yaw)
+            roll_rad = deg_to_rad(roll_deg)
+            pitch_rad = deg_to_rad(pitch_deg)
+            yaw_rad = deg_to_rad(yaw_deg)
 
             if not args.no_continuous:
                 # Use continuous control mode with feedback
