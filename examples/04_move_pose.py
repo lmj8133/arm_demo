@@ -24,6 +24,9 @@ Usage:
     # Use single command mode (without continuous feedback)
     uv run python examples/04_move_pose.py --x 0.1 --no-continuous
 
+    # Use Jacobian-based IK instead of SDK's EndPoseCtrl
+    uv run python examples/04_move_pose.py --x 0.1 --use-ik
+
 WARNING: This will physically move the robot arm!
          Ensure the workspace is clear before running.
          Not all positions may be reachable.
@@ -89,6 +92,10 @@ def main():
         "--verbose", "-v", action="store_true",
         help="Print pose updates during motion"
     )
+    parser.add_argument(
+        "--use-ik", action="store_true",
+        help="Use Jacobian-based IK instead of SDK's EndPoseCtrl"
+    )
     args = parser.parse_args()
 
     try:
@@ -96,13 +103,13 @@ def main():
             reader = JointReader(conn.piper)
             motion = MotionController(conn.piper, speed_factor=args.speed)
 
-            # Enable arm first (auto moves to home position)
+            # Enable arm
             print("[INFO] Enabling arm (moving to home position)...")
             conn.enable()
             print("[OK] Arm enabled and at home position")
             print()
 
-            # Read pose AFTER enable (arm is now at home position)
+            # Read pose AFTER enable
             state = reader.read_joints()
             print("[INFO] Current joint state (at home):")
             print(state)
@@ -128,7 +135,8 @@ def main():
             print(f"       (Current: {current_x:.3f}, {current_y:.3f}, {current_z:.3f})")
             print(f"       (Offset:  {offset_x:+.3f}, {offset_y:+.3f}, {offset_z:+.3f})")
             print(f"       Speed factor: {args.speed}")
-            mode_str = "Single command" if args.no_continuous else f"Continuous (settle: {args.settle}s)"
+            ik_str = " + IK" if args.use_ik else ""
+            mode_str = f"Single command{ik_str}" if args.no_continuous else f"Continuous{ik_str} (settle: {args.settle}s)"
             print(f"       Mode: {mode_str}")
             print("[WARN] The arm will move! Ensure workspace is clear.")
             print()
@@ -163,18 +171,32 @@ def main():
                         x_mm, y_mm, z_mm = current_pose.position_mm()
                         print(f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm")
 
-                reached = motion.move_cartesian_continuous(
-                    x=target_x,
-                    y=target_y,
-                    z=target_z,
-                    roll=roll_rad,
-                    pitch=pitch_rad,
-                    yaw=yaw_rad,
-                    speed_factor=args.speed,
-                    timeout_sec=args.timeout,
-                    settle_sec=args.settle,
-                    pose_callback=pose_callback if args.verbose else None,
-                )
+                if args.use_ik:
+                    reached = motion.move_cartesian_ik_continuous(
+                        x=target_x,
+                        y=target_y,
+                        z=target_z,
+                        roll=roll_rad,
+                        pitch=pitch_rad,
+                        yaw=yaw_rad,
+                        speed_factor=args.speed,
+                        timeout_sec=args.timeout,
+                        settle_sec=args.settle,
+                        pose_callback=pose_callback if args.verbose else None,
+                    )
+                else:
+                    reached = motion.move_cartesian_continuous(
+                        x=target_x,
+                        y=target_y,
+                        z=target_z,
+                        roll=roll_rad,
+                        pitch=pitch_rad,
+                        yaw=yaw_rad,
+                        speed_factor=args.speed,
+                        timeout_sec=args.timeout,
+                        settle_sec=args.settle,
+                        pose_callback=pose_callback if args.verbose else None,
+                    )
 
                 if reached:
                     print("[INFO] Target pose reached!")
@@ -184,15 +206,30 @@ def main():
             else:
                 # Use single command mode (original behavior)
                 print("[INFO] Moving to target pose (single command)...")
-                motion.move_cartesian(
-                    x=target_x,
-                    y=target_y,
-                    z=target_z,
-                    roll=roll_rad,
-                    pitch=pitch_rad,
-                    yaw=yaw_rad,
-                    speed_factor=args.speed,
-                )
+                if args.use_ik:
+                    success = motion.move_cartesian_ik(
+                        x=target_x,
+                        y=target_y,
+                        z=target_z,
+                        roll=roll_rad,
+                        pitch=pitch_rad,
+                        yaw=yaw_rad,
+                        speed_factor=args.speed,
+                    )
+                    if success:
+                        print("[INFO] IK solution found and joint command sent")
+                    else:
+                        print("[WARN] IK failed to find a valid solution")
+                else:
+                    motion.move_cartesian(
+                        x=target_x,
+                        y=target_y,
+                        z=target_z,
+                        roll=roll_rad,
+                        pitch=pitch_rad,
+                        yaw=yaw_rad,
+                        speed_factor=args.speed,
+                    )
 
                 # Wait for motion using pose feedback
                 print("[INFO] Waiting for motion to complete...")

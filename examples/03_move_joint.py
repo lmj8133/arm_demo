@@ -99,7 +99,7 @@ def main():
             print("[INFO] Holding position for 3 seconds...")
             time.sleep(3.0)
 
-            # Safely disable arm (returns to home first)
+            # Safely disable arm
             print("[INFO] Safely disabling arm (returning to home)...")
             conn.safe_disable()
 
