@@ -37,11 +37,18 @@ class PiperConnection:
     # Slave mode command for reading feedback
     SLAVE_MODE_CMD = 0xFC
 
-    # Home position: all joints at 0 radians (used on enable)
-    HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    # Zero position: all joints at 0 radians (WARNING: near singularity, pitch~85°)
+    ZERO_HOME_POSITION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-    # Safe home position: resting pose for disable (J5 at ~21.7 degrees)
-    SAFE_HOME_POSITION = [0.00175, -0.0419, 0.0367, -0.00524, 0.3787, 0.0]
+    # Home position: official safe pose with pitch=0° for reliable Cartesian control
+    # Cartesian: (150, -50, 150) mm, orientation: roll=-179.9°, pitch=0°, yaw=-179.9°
+    #HOME_POSITION = [-0.31936, 1.32373, -0.43202, 0.0, 0.76541, -0.31948]
+    # for demo
+    HOME_POSITION = [1.62684, -0.00482, -0.00401, 0.02339, 0.12292, -0.73655]
+
+    # Safe home position: resting pose for disable
+    # Cartesian: (56.13, 0, 213.27) mm, orientation: roll=0°, pitch=87°, yaw=0°
+    SAFE_HOME_POSITION = [0.01321, -0.0378, 0.04442, 0.01545, 0.2674, -0.757]
 
     # Conversion factor: radians to milli-degrees (1000 * 180 / pi)
     RAD_TO_MILLIDEG = 57295.7795
@@ -171,7 +178,7 @@ class PiperConnection:
         self,
         speed: int = 20,
         timeout_sec: float = 15.0,
-        tolerance_millideg: int = 2000,
+        tolerance_millideg: int = 3000,
     ) -> bool:
         """Move to home position and wait for completion.
 
@@ -184,9 +191,9 @@ class PiperConnection:
             True if home position reached within timeout
         """
         # Send home command
-        joints = [round(p * self.RAD_TO_MILLIDEG) for p in self.HOME_POSITION]
+        targets = [round(p * self.RAD_TO_MILLIDEG) for p in self.HOME_POSITION]
         self.piper.MotionCtrl_2(0x01, 0x01, speed, 0x00)  # CAN ctrl, MOVE_J
-        self.piper.JointCtrl(*joints)
+        self.piper.JointCtrl(*targets)
 
         # Wait for position with feedback
         start_time = time.time()
@@ -201,7 +208,7 @@ class PiperConnection:
                 joint_msg.joint_state.joint_6,
             ]
 
-            if all(abs(pos) <= tolerance_millideg for pos in positions):
+            if all(abs(pos - tgt) <= tolerance_millideg for pos, tgt in zip(positions, targets)):
                 return True
 
             time.sleep(0.1)
@@ -351,21 +358,24 @@ class PiperConnection:
         home_speed: int = 20,
         timeout_sec: float = 15.0,
         settle_sec: float = 1.0,
+        pre_home_delay: float = 3.0,
     ) -> None:
         """Safely disable arm by returning to safe home position first.
 
         This prevents the arm from falling due to gravity when motors
         are disabled. The sequence is:
-        1. Move to safe home position (SAFE_HOME_POSITION) with position detection
-        2. Wait for settle time after reaching position
-        3. Switch to standby mode (holds position)
-        4. Disable motors
+        1. Wait for pre_home_delay (let arm stabilize after motion)
+        2. Move to safe home position (SAFE_HOME_POSITION) with position detection
+        3. Wait for settle time after reaching position
+        4. Switch to standby mode (holds position)
+        5. Disable motors
 
         Args:
             return_home: Move to home position before disable (default: True)
             home_speed: Speed percentage for homing motion (default: 20)
             timeout_sec: Timeout for homing motion (default: 15.0)
             settle_sec: Settle time after reaching safe home (default: 1.0)
+            pre_home_delay: Delay before homing to let arm stabilize (default: 3.0)
 
         Raises:
             PiperConnectionError: If not connected to the arm
@@ -374,17 +384,19 @@ class PiperConnection:
             raise PiperConnectionError("Not connected to Piper arm")
 
         if return_home and self._enabled:
-            # Step 1: Move to safe home position with position detection
+            # Step 1: Wait for arm to stabilize after motion
+            time.sleep(pre_home_delay)
+            # Step 2: Move to safe home position with position detection
             self._move_to_safe_home_and_wait(home_speed, timeout_sec)
 
-            # Step 2: Settle time after reaching position
+            # Step 3: Settle time after reaching position
             time.sleep(settle_sec)
 
-        # Step 3: Switch to standby mode (holds position)
+        # Step 4: Switch to standby mode (holds position)
         self.piper.MotionCtrl_2(0x00, 0x00, 0, 0x00)
         time.sleep(0.3)
 
-        # Step 4: Disable motors
+        # Step 5: Disable motors
         self.piper.DisableArm(7)
         self._enabled = False
 
