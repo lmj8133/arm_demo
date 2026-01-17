@@ -48,7 +48,7 @@ class PiperConnection:
 
     # Safe home position: resting pose for disable
     # Cartesian: (56.13, 0, 213.27) mm, orientation: roll=0°, pitch=87°, yaw=0°
-    SAFE_HOME_POSITION = [0.01321, -0.0378, 0.04442, 0.01545, 0.2674, -0.757]
+    SAFE_HOME_POSITION = [0.01726, -0.04299, 0.04384, 0.0403, 0.34798, -0.75709]
 
     # Conversion factor: radians to milli-degrees (1000 * 180 / pi)
     RAD_TO_MILLIDEG = 57295.7795
