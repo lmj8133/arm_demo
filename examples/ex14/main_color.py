@@ -187,7 +187,7 @@ def draw_status(
         )
 
     # Help text
-    help_text = "[q]uit [space]toggle [c]alibrate [r]eset [1-4]color"
+    help_text = "[q]uit [space]toggle [s]top [c]alibrate [r]eset [1-4]color"
     cv2.putText(
         frame,
         help_text,
@@ -372,7 +372,7 @@ def main():
     # --- Main loop ---
     print()
     print("[INFO] Starting tracking loop...")
-    print("[INFO] Console commands: q=quit, c=calibrate, r=reset, 1-4=color")
+    print("[INFO] Console commands: q=quit, s=stop, c=calibrate, r=reset, 1-4=color")
     if not args.no_display:
         print("[INFO] Press 'q' to quit, 'space' to toggle tracking, 'c' to calibrate")
         print("[INFO] Press 'r' to reset, 1-4 to switch color (red/green/blue/yellow)")
@@ -502,6 +502,7 @@ def main():
                         print("[WARNING] No target detected for calibration")
 
                 elif key == ord("r"):
+                    tracking_enabled = False
                     print("[INFO] Returning to center...")
                     result = controller.move_to_normalized(
                         0.5,
@@ -512,6 +513,10 @@ def main():
                     last_move_result = result
                     last_target_y = 0.5
                     last_target_z = 0.5
+
+                elif key == ord("s"):
+                    tracking_enabled = False
+                    print("[INFO] Tracking stopped")
 
                 elif key in COLOR_KEYS:
                     new_color = COLOR_KEYS[key]
@@ -540,6 +545,7 @@ def main():
                         print("[WARNING] No target detected for calibration")
 
                 elif cmd == "r":
+                    tracking_enabled = False
                     print("[INFO] Returning to center...")
                     result = controller.move_to_normalized(
                         0.5,
@@ -550,6 +556,10 @@ def main():
                     last_move_result = result
                     last_target_y = 0.5
                     last_target_z = 0.5
+
+                elif cmd == "s":
+                    tracking_enabled = False
+                    print("[INFO] Tracking stopped")
 
                 elif cmd in CONSOLE_COLOR_CMDS:
                     new_color = CONSOLE_COLOR_CMDS[cmd]
