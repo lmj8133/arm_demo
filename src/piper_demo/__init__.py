@@ -20,6 +20,14 @@ from .kinematics import forward_kinematics, FKResult
 from .jacobian import compute_jacobian, is_near_singularity
 from .inverse_kinematics import inverse_kinematics, IKResult, IKConfig, pose_to_matrix
 from .utils import check_can_interface, deg_to_rad, rad_to_deg, format_end_pose
+from .coordinate_mapping import (
+    CameraMappingConfig,
+    CameraMapping,
+    SafePlaneProjector,
+    WorkspaceBounds,
+    AxisBounds,
+)
+from .vision_arm_controller import VisionArmController, MoveResult
 
 __all__ = [
     "PiperConnection",
@@ -40,6 +48,15 @@ __all__ = [
     "deg_to_rad",
     "rad_to_deg",
     "format_end_pose",
+    # Coordinate mapping
+    "CameraMappingConfig",
+    "CameraMapping",
+    "SafePlaneProjector",
+    "WorkspaceBounds",
+    "AxisBounds",
+    # Vision arm controller
+    "VisionArmController",
+    "MoveResult",
 ]
 
 __version__ = "0.1.0"
