@@ -19,3 +19,8 @@ Thumbs.db
 
 # Project specific
 piper_sdk/
+
+# Model files
+*.pt
+*.pth
+*.onnx
