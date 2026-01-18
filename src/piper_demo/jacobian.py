@@ -345,6 +345,6 @@ def is_near_singularity(joint_angles: List[float], threshold: float = 0.001) -> 
     Returns:
         True if near singularity
     """
-    J = compute_jacobian_analytical(joint_angles)
+    J = compute_jacobian_numerical(joint_angles)
     det = abs(jacobian_determinant(J))
     return det < threshold
