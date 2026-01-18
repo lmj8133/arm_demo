@@ -10,14 +10,15 @@ Usage:
     uv run python examples/ex14/main_color.py --color green --min-area 1000
     uv run python examples/ex14/main_color.py --no-display  # headless mode
 
-Controls (when display enabled):
+Controls (GUI and console):
     q     - Quit and safely disable arm
-    space - Toggle tracking on/off
+    space - Toggle tracking on/off (GUI only)
+    c     - Calibrate Y origin using current target position
     r     - Return to center position
-    1     - Track red
-    2     - Track green
-    3     - Track blue
-    4     - Track yellow
+    1-4   - Track red/green/blue/yellow
+
+Console commands (type + Enter):
+    Same as above, useful in headless mode (--no-display)
 
 WARNING: This will physically move the robot arm!
          Ensure the workspace is clear before running.
@@ -25,7 +26,9 @@ WARNING: This will physically move the robot arm!
 
 import argparse
 import os
+import queue
 import sys
+import threading
 import time
 from typing import Optional
 
@@ -52,6 +55,24 @@ COLOR_KEYS = {
     ord("3"): "blue",
     ord("4"): "yellow",
 }
+
+# Console command mappings (for headless mode)
+CONSOLE_COLOR_CMDS = {
+    "1": "red",
+    "2": "green",
+    "3": "blue",
+    "4": "yellow",
+}
+
+
+def console_input_thread(cmd_queue: queue.Queue, stop_event: threading.Event) -> None:
+    """Background thread to read console input (non-blocking for main loop)."""
+    while not stop_event.is_set():
+        try:
+            cmd = input()
+            cmd_queue.put(cmd.strip().lower())
+        except EOFError:
+            break
 
 
 def draw_target(
@@ -96,6 +117,7 @@ def draw_status(
     color_name: str,
     last_target: Optional[ColorTarget],
     last_move_result,
+    origin_y: float = 0.5,
 ) -> None:
     """Draw status overlay on frame."""
     h, w = frame.shape[:2]
@@ -151,8 +173,21 @@ def draw_status(
             1,
         )
 
+    # Origin calibration status
+    if origin_y != 0.5:
+        cal_text = f"Origin Y: {origin_y:.2f}"
+        cv2.putText(
+            frame,
+            cal_text,
+            (10, 120),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            1,
+        )
+
     # Help text
-    help_text = "[q]uit [space]toggle [r]eset [1-4]color"
+    help_text = "[q]uit [space]toggle [c]alibrate [r]eset [1-4]color"
     cv2.putText(
         frame,
         help_text,
@@ -240,6 +275,13 @@ def main():
         help="Override Y height for larger XZ reach (e.g., 0.07 for 70mm). "
              "Use scripts/find_optimal_y.py to find optimal value.",
     )
+    parser.add_argument(
+        "--workspace-range",
+        type=float,
+        default=0.15,
+        metavar="METERS",
+        help="Half-range for XZ workspace (default: 0.15 = ±150mm)",
+    )
     args = parser.parse_args()
 
     # Parse camera device (int or string)
@@ -301,6 +343,7 @@ def main():
         print("[INFO] Computing workspace from HOME_POSITION...")
         controller, home_fk = VisionArmController.from_home_position(
             PiperConnection.HOME_POSITION, reader, motion,
+            workspace_range_xz=args.workspace_range,
             invert_cam_y=True,   # Flip: was False (default)
             invert_cam_z=False,  # Flip: was True (default)
             override_y=args.override_y,
@@ -329,11 +372,20 @@ def main():
     # --- Main loop ---
     print()
     print("[INFO] Starting tracking loop...")
+    print("[INFO] Console commands: q=quit, c=calibrate, r=reset, 1-4=color")
     if not args.no_display:
-        print("[INFO] Press 'q' to quit, 'space' to toggle tracking, 'r' to reset")
-        print("[INFO] Press 1-4 to switch color (red/green/blue/yellow)")
+        print("[INFO] Press 'q' to quit, 'space' to toggle tracking, 'c' to calibrate")
+        print("[INFO] Press 'r' to reset, 1-4 to switch color (red/green/blue/yellow)")
         # Create window before loop
         cv2.namedWindow("Color Tracking", cv2.WINDOW_AUTOSIZE)
+
+    # Start console input thread (works in both display and headless mode)
+    cmd_queue: queue.Queue = queue.Queue()
+    stop_event = threading.Event()
+    input_thread = threading.Thread(
+        target=console_input_thread, args=(cmd_queue, stop_event), daemon=True
+    )
+    input_thread.start()
 
     tracking_enabled = True
     last_move_time = 0.0
@@ -341,6 +393,7 @@ def main():
     last_target_z = 0.5
     last_target: Optional[ColorTarget] = None
     last_move_result = None
+    origin_y = 0.5  # Default: center is origin
 
     running = True
     frame_count = 0
@@ -366,7 +419,12 @@ def main():
                 # Image X (horizontal) -> Arm X (front-back)
                 # Image Y (vertical) -> Arm Z (left-right)
                 norm_x, norm_y = target.normalized_center(w, h)
-                target_y = norm_y  # Camera vertical -> cam Y -> Arm Z (left-right)
+
+                # Apply origin_y calibration (shift so origin_y becomes 0.5)
+                calibrated_y = 0.5 + (norm_y - origin_y)
+                calibrated_y = max(0.0, min(1.0, calibrated_y))  # Clamp to [0, 1]
+
+                target_y = calibrated_y  # Camera vertical -> cam Y -> Arm Z (left-right)
                 target_z = norm_x  # Camera horizontal -> cam Z -> Arm X (front-back)
 
                 # Check if we should move
@@ -416,6 +474,7 @@ def main():
                     tracker.color_name,
                     last_target,
                     last_move_result,
+                    origin_y,
                 )
 
                 cv2.imshow("Color Tracking", frame)
@@ -431,6 +490,15 @@ def main():
                     tracking_enabled = not tracking_enabled
                     status = "enabled" if tracking_enabled else "disabled"
                     print(f"[INFO] Tracking {status}")
+
+                elif key == ord("c"):
+                    # Calibrate origin using current target position
+                    if last_target:
+                        _, raw_y = last_target.normalized_center(w, h)
+                        origin_y = raw_y
+                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}")
+                    else:
+                        print("[WARNING] No target detected for calibration")
 
                 elif key == ord("r"):
                     print("[INFO] Returning to center...")
@@ -449,7 +517,44 @@ def main():
                     tracker.set_color(new_color)
                     print(f"[INFO] Switched to color: {new_color}")
 
-            else:
+            # Handle console input (works in both display and headless mode)
+            while not cmd_queue.empty():
+                try:
+                    cmd = cmd_queue.get_nowait()
+                except queue.Empty:
+                    break
+
+                if cmd == "q":
+                    print("[INFO] Quit requested (console)")
+                    running = False
+
+                elif cmd == "c":
+                    # Calibrate origin using current target position
+                    if last_target:
+                        _, raw_y = last_target.normalized_center(w, h)
+                        origin_y = raw_y
+                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}")
+                    else:
+                        print("[WARNING] No target detected for calibration")
+
+                elif cmd == "r":
+                    print("[INFO] Returning to center...")
+                    result = controller.move_to_normalized(
+                        0.5,
+                        0.5,
+                        speed_factor=speed,
+                        wait=True,
+                    )
+                    last_move_result = result
+                    last_target_y = 0.5
+                    last_target_z = 0.5
+
+                elif cmd in CONSOLE_COLOR_CMDS:
+                    new_color = CONSOLE_COLOR_CMDS[cmd]
+                    tracker.set_color(new_color)
+                    print(f"[INFO] Switched to color: {new_color}")
+
+            if args.no_display:
                 # Headless mode: small delay to prevent CPU spinning
                 time.sleep(0.01)
 
@@ -459,6 +564,7 @@ def main():
 
     # --- Cleanup ---
     print("[INFO] Cleaning up...")
+    stop_event.set()  # Signal input thread to stop
 
     if not args.no_display:
         cv2.destroyAllWindows()
