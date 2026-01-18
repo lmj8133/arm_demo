@@ -183,6 +183,7 @@ class VisionArmController:
         workspace_range_y: float = 0.05,
         invert_cam_y: bool = False,
         invert_cam_z: bool = True,
+        override_y: Optional[float] = None,
     ) -> Tuple["VisionArmController", FKResult]:
         """Create controller with workspace centered on HOME_POSITION FK result.
 
@@ -198,6 +199,9 @@ class VisionArmController:
             workspace_range_y: Half-range for Y axis (meters, default ±50mm)
             invert_cam_y: Invert camera Y axis
             invert_cam_z: Invert camera Z axis
+            override_y: Use this Y height instead of home FK Y (meters).
+                        Useful for maximizing XZ reachable area. Use
+                        scripts/find_optimal_y.py to determine the optimal value.
 
         Returns:
             Tuple of (VisionArmController instance, FKResult of home position)
@@ -208,14 +212,23 @@ class VisionArmController:
                 PiperConnection.HOME_POSITION, reader, motion
             )
             print(f"Workspace centered at: {home_fk.position_mm()} mm")
+
+            # With override_y for larger XZ reach:
+            controller, home_fk = VisionArmController.from_home_position(
+                PiperConnection.HOME_POSITION, reader, motion,
+                override_y=0.07  # 70mm, computed by find_optimal_y.py
+            )
         """
         # Compute FK for home position
         home_fk = forward_kinematics(home_joints)
 
+        # Use override_y if provided, otherwise use home FK Y
+        working_y = override_y if override_y is not None else home_fk.y
+
         # Build config centered on home FK
         config = CameraMappingConfig()
 
-        # Workspace bounds centered on home position
+        # Workspace bounds centered on home position (XZ) or working_y (Y)
         config.workspace.x_arm = AxisBounds(
             home_fk.x - workspace_range_xz,
             home_fk.x + workspace_range_xz,
@@ -225,8 +238,8 @@ class VisionArmController:
             home_fk.z + workspace_range_xz,
         )
         config.workspace.y_arm = AxisBounds(
-            home_fk.y - workspace_range_y,
-            home_fk.y + workspace_range_y,
+            working_y - workspace_range_y,
+            working_y + workspace_range_y,
         )
 
         # Use home FK orientation
@@ -234,9 +247,9 @@ class VisionArmController:
         config.orientation.pitch = math.degrees(home_fk.pitch)
         config.orientation.yaw = math.degrees(home_fk.yaw)
 
-        # Use constant Y at home height for predictable motion
+        # Use constant Y at working height for predictable motion
         config.safe_plane.strategy = "constant"
-        config.safe_plane.base_y = home_fk.y
+        config.safe_plane.base_y = working_y
 
         # Auto-adjust singularity threshold based on HOME position
         # If HOME is near singularity, use a smaller threshold to avoid false positives

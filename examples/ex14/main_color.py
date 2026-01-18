@@ -232,6 +232,14 @@ def main():
         action="store_true",
         help="Disable GUI display (headless mode)",
     )
+    parser.add_argument(
+        "--override-y",
+        type=float,
+        default=None,
+        metavar="METERS",
+        help="Override Y height for larger XZ reach (e.g., 0.07 for 70mm). "
+             "Use scripts/find_optimal_y.py to find optimal value.",
+    )
     args = parser.parse_args()
 
     # Parse camera device (int or string)
@@ -295,12 +303,15 @@ def main():
             PiperConnection.HOME_POSITION, reader, motion,
             invert_cam_y=True,   # Flip: was False (default)
             invert_cam_z=False,  # Flip: was True (default)
+            override_y=args.override_y,
         )
 
         # Show workspace info
         ws = controller.config.workspace
         x_mm, y_mm, z_mm = home_fk.position_mm()
         print(f"[INFO] HOME FK: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
+        if args.override_y is not None:
+            print(f"[INFO] Override Y: {args.override_y*1000:.1f} mm (delta: {(args.override_y - home_fk.y)*1000:+.1f} mm)")
         print(
             f"[INFO] Workspace X: {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm"
         )
