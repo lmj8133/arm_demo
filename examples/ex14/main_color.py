@@ -387,7 +387,7 @@ def main():
     )
     input_thread.start()
 
-    tracking_enabled = True
+    tracking_enabled = False
     last_move_time = 0.0
     last_target_y = 0.5
     last_target_z = 0.5
@@ -496,7 +496,8 @@ def main():
                     if last_target:
                         _, raw_y = last_target.normalized_center(w, h)
                         origin_y = raw_y
-                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}")
+                        tracking_enabled = True  # Auto-start tracking after calibration
+                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started")
                     else:
                         print("[WARNING] No target detected for calibration")
 
@@ -533,7 +534,8 @@ def main():
                     if last_target:
                         _, raw_y = last_target.normalized_center(w, h)
                         origin_y = raw_y
-                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}")
+                        tracking_enabled = True  # Auto-start tracking after calibration
+                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started")
                     else:
                         print("[WARNING] No target detected for calibration")
 
