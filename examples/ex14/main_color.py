@@ -344,8 +344,8 @@ def main():
         controller, home_fk = VisionArmController.from_home_position(
             PiperConnection.HOME_POSITION, reader, motion,
             workspace_range_xz=args.workspace_range,
-            invert_cam_y=True,   # Flip: was False (default)
-            invert_cam_z=False,  # Flip: was True (default)
+            invert_cam_y=False,   # Flip: was False (default)
+            invert_cam_z=True,  # Flip: was True (default)
             override_z=args.override_z,
         )
 
@@ -416,17 +416,18 @@ def main():
             # Process detection
             if target and tracking_enabled:
                 # Get normalized center
-                # REP-103 coordinate mapping:
+                # XZ plane tracking (REP-103 convention):
                 # Image X (horizontal) -> Arm X (front-back)
-                # Image Y (vertical) -> Arm Y (left-right)
+                # Image Y (vertical) -> Arm Z (height)
+                # Arm Y stays fixed at workspace center
                 norm_x, norm_y = target.normalized_center(w, h)
 
-                # Apply origin_y calibration (shift so origin_y becomes 0.5)
-                calibrated_y = 0.5 + (norm_y - origin_y)
-                calibrated_y = max(0.0, min(1.0, calibrated_y))  # Clamp to [0, 1]
+                # Apply origin_y calibration on vertical axis (for Z height)
+                calibrated_z = 0.5 + (norm_y - origin_y)
+                calibrated_z = max(0.0, min(1.0, calibrated_z))  # Clamp to [0, 1]
 
-                target_y = calibrated_y  # Camera vertical -> cam Y -> Arm Y (left-right)
-                target_z = norm_x  # Camera horizontal -> cam Z -> Arm X (front-back)
+                target_y = norm_x       # Camera horizontal -> Arm X (front-back)
+                target_z = calibrated_z # Camera vertical -> Arm Z (height)
 
                 # Check if we should move
                 if should_move(

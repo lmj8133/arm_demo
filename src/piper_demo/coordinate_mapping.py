@@ -366,6 +366,49 @@ class CameraMapping:
 
         return x_arm, y_arm
 
+    def camera_to_arm_xz(
+        self, y_cam: float, z_cam: float, clamp: bool = True
+    ) -> Tuple[float, float]:
+        """Convert normalized camera coordinates to arm X and Z.
+
+        For XZ plane tracking (front-back + height).
+
+        Args:
+            y_cam: Camera horizontal coordinate (0-1)
+            z_cam: Camera vertical coordinate (0-1)
+            clamp: If True, clamp output to workspace bounds
+
+        Returns:
+            (x_arm, z_arm) in meters
+        """
+        # Normalize input to 0-1 range
+        y_cam = max(0.0, min(1.0, y_cam))
+        z_cam = max(0.0, min(1.0, z_cam))
+
+        # Apply inversions
+        if self.invert_cam_y:
+            y_cam = 1.0 - y_cam
+        if self.invert_cam_z:
+            z_cam = 1.0 - z_cam
+
+        # Map camera Y (horizontal, 0-1) → arm X (front-back)
+        x_arm = (
+            self.config.workspace.x_arm.min
+            + y_cam * self.config.workspace.x_arm.range()
+        )
+
+        # Map camera Z (vertical, 0-1) → arm Z (height)
+        z_arm = (
+            self.config.workspace.z_arm.min
+            + z_cam * self.config.workspace.z_arm.range()
+        )
+
+        if clamp:
+            x_arm = self.config.workspace.x_arm.clamp(x_arm)
+            z_arm = self.config.workspace.z_arm.clamp(z_arm)
+
+        return x_arm, z_arm
+
     def arm_to_camera(self, x_arm: float, y_arm: float) -> Tuple[float, float]:
         """Convert arm X and Y coordinates back to normalized camera coordinates.
 
