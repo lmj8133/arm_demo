@@ -87,19 +87,19 @@ def print_status(controller: VisionArmController, speed: float):
     y_cam, z_cam = controller.get_current_camera_coords()
 
     print()
-    print(f"Arm Position:")
+    print(f"Arm Position (REP-103: X=front, Y=left, Z=up):")
     print(f"  X={pose.x*1000:.1f}, Y={pose.y*1000:.1f}, Z={pose.z*1000:.1f} mm")
     print(f"Camera Coordinates (normalized):")
     print(f"  Y={y_cam:.3f}, Z={z_cam:.3f}")
     print(f"Speed: {speed}")
     print()
 
-    # Print workspace bounds
+    # Print workspace bounds (REP-103 convention)
     ws = controller.config.workspace
-    print(f"Workspace bounds:")
-    print(f"  X: {ws.x_arm.min*1000:.0f} to {ws.x_arm.max*1000:.0f} mm")
-    print(f"  Y: {ws.y_arm.min*1000:.0f} to {ws.y_arm.max*1000:.0f} mm")
-    print(f"  Z: {ws.z_arm.min*1000:.0f} to {ws.z_arm.max*1000:.0f} mm")
+    print(f"Workspace bounds (REP-103):")
+    print(f"  X (front/back): {ws.x_arm.min*1000:.0f} to {ws.x_arm.max*1000:.0f} mm")
+    print(f"  Y (left/right): {ws.y_arm.min*1000:.0f} to {ws.y_arm.max*1000:.0f} mm")
+    print(f"  Z (height):     {ws.z_arm.min*1000:.0f} to {ws.z_arm.max*1000:.0f} mm")
 
 
 def parse_command(line: str) -> Tuple[str, list]:

@@ -268,12 +268,12 @@ def main():
         help="Disable GUI display (headless mode)",
     )
     parser.add_argument(
-        "--override-y",
+        "--override-z",
         type=float,
         default=None,
         metavar="METERS",
-        help="Override Y height for larger XZ reach (e.g., 0.07 for 70mm). "
-             "Use scripts/find_optimal_y.py to find optimal value.",
+        help="Override Z height for larger XY reach (e.g., 0.07 for 70mm). "
+             "Use scripts/find_optimal_z.py to find optimal value.",
     )
     parser.add_argument(
         "--workspace-range",
@@ -346,20 +346,20 @@ def main():
             workspace_range_xz=args.workspace_range,
             invert_cam_y=True,   # Flip: was False (default)
             invert_cam_z=False,  # Flip: was True (default)
-            override_y=args.override_y,
+            override_z=args.override_z,
         )
 
-        # Show workspace info
+        # Show workspace info (REP-103: X=front, Y=left, Z=up)
         ws = controller.config.workspace
         x_mm, y_mm, z_mm = home_fk.position_mm()
         print(f"[INFO] HOME FK: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
-        if args.override_y is not None:
-            print(f"[INFO] Override Y: {args.override_y*1000:.1f} mm (delta: {(args.override_y - home_fk.y)*1000:+.1f} mm)")
+        if args.override_z is not None:
+            print(f"[INFO] Override Z: {args.override_z*1000:.1f} mm (delta: {(args.override_z - home_fk.z)*1000:+.1f} mm)")
         print(
-            f"[INFO] Workspace X: {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm"
+            f"[INFO] Workspace X (front/back): {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm"
         )
         print(
-            f"[INFO] Workspace Z: {ws.z_arm.min*1000:.0f} ~ {ws.z_arm.max*1000:.0f} mm"
+            f"[INFO] Workspace Y (left/right): {ws.y_arm.min*1000:.0f} ~ {ws.y_arm.max*1000:.0f} mm"
         )
 
         print("[OK] Arm ready!")
@@ -416,15 +416,16 @@ def main():
             # Process detection
             if target and tracking_enabled:
                 # Get normalized center
+                # REP-103 coordinate mapping:
                 # Image X (horizontal) -> Arm X (front-back)
-                # Image Y (vertical) -> Arm Z (left-right)
+                # Image Y (vertical) -> Arm Y (left-right)
                 norm_x, norm_y = target.normalized_center(w, h)
 
                 # Apply origin_y calibration (shift so origin_y becomes 0.5)
                 calibrated_y = 0.5 + (norm_y - origin_y)
                 calibrated_y = max(0.0, min(1.0, calibrated_y))  # Clamp to [0, 1]
 
-                target_y = calibrated_y  # Camera vertical -> cam Y -> Arm Z (left-right)
+                target_y = calibrated_y  # Camera vertical -> cam Y -> Arm Y (left-right)
                 target_z = norm_x  # Camera horizontal -> cam Z -> Arm X (front-back)
 
                 # Check if we should move

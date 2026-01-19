@@ -1,9 +1,14 @@
 # Camera-to-Arm Workspace Configuration
 #
+# Coordinate system follows ROS REP-103 convention:
+#   - Arm X: forward/backward (前後)
+#   - Arm Y: left/right (左右)
+#   - Arm Z: up/down (高度)
+#
 # Coordinate mapping:
-#   - Camera Y (horizontal, 0→1) → Arm Z (left-right)
+#   - Camera Y (horizontal, 0→1) → Arm Y (left-right)
 #   - Camera Z (vertical, 0→1)   → Arm X (front-back, inverted)
-#   - Arm Y (height)             → Dynamically computed for safety
+#   - Arm Z (height)             → Dynamically computed for safety
 
 # Workspace bounds in meters
 workspace:
@@ -12,29 +17,29 @@ workspace:
     min: 0.10   # closest to base
     max: 0.35   # furthest from base
 
-  # Arm Z axis (left/right)
-  z_arm:
+  # Arm Y axis (left/right, REP-103)
+  y_arm:
     min: -0.15  # right side (from arm's perspective)
     max: 0.15   # left side
 
-  # Arm Y axis (height) - used for clamping
-  y_arm:
+  # Arm Z axis (height, REP-103) - used for clamping
+  z_arm:
     min: 0.05   # minimum safe height
     max: 0.25   # maximum height
 
-# Safe plane projection strategy
-safe_plane:
+# Safe height projection strategy (REP-103: Z is height)
+safe_height:
   # Strategy: "constant" or "adaptive"
   strategy: "adaptive"
 
-  # Base Y height (used for constant strategy, base for adaptive)
-  base_y: 0.10
+  # Base Z height (used for constant strategy, base for adaptive)
+  base_z: 0.10
 
   # Adaptive strategy parameters
-  # Y increases as end-effector moves further from workspace center
-  distance_factor: 0.05   # Y increase per meter from center
-  y_min: 0.05             # minimum Y value
-  y_max: 0.25             # maximum Y value
+  # Z increases as end-effector moves further from workspace center
+  distance_factor: 0.05   # Z increase per meter from center
+  z_min: 0.05             # minimum Z value
+  z_max: 0.25             # maximum Z value
 
 # End-effector orientation (degrees)
 # Default: pointing downward for top-down grasping
