@@ -47,7 +47,11 @@ class PiperConnection:
     # HOME_POSITION = [1.62684, -0.00482, -0.00401, 0.02339, 0.12292, -0.73655]
     # for demo-center (Y=8.9mm, optimal height for maximizing XZ reach)
     #HOME_POSITION = [1.59689, 0.2561, -0.84699, 0.05036, 0.70714, -0.75259]
-    HOME_POSITION = [0.01726, -0.04299, 0.04384, 0.0403, 0.34798, -0.75709]
+    #HOME_POSITION = [0.01726, -0.04299, 0.04384, 0.0403, 0.34798, -0.75709]
+    #HOME_POSITION = [-0.63137, 1.39531, -0.01832, -0.73327, -1.09347, -0.52215]
+    #HOME_POSITION = [-0.0278, 0.30056, -0.83139, -0.03681, 0.5104, -0.69689]
+    HOME_POSITION = [-0.05434, 0.13097, -0.89813, 0.01238, 0.74649, -0.73524]
+
 
     # Safe home position: resting pose for disable
     # Cartesian: (56.13, 0, 213.27) mm, orientation: roll=0°, pitch=87°, yaw=0°

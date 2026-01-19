@@ -344,7 +344,7 @@ def main():
         controller, home_fk = VisionArmController.from_home_position(
             PiperConnection.HOME_POSITION, reader, motion,
             workspace_range_xz=args.workspace_range,
-            invert_cam_y=False,   # Flip: was False (default)
+            invert_cam_y=True,   # Flip: was False (default)
             invert_cam_z=True,  # Flip: was True (default)
             override_z=args.override_z,
         )
