@@ -416,10 +416,10 @@ def main():
             # Process detection
             if target and tracking_enabled:
                 # Get normalized center
-                # XZ plane tracking (REP-103 convention):
-                # Image X (horizontal) -> Arm X (front-back)
+                # YZ plane tracking (camera beside arm, facing +X):
+                # Image X (horizontal) -> Arm Y (left-right)
                 # Image Y (vertical) -> Arm Z (height)
-                # Arm Y stays fixed at workspace center
+                # Arm X stays fixed at workspace center
                 norm_x, norm_y = target.normalized_center(w, h)
 
                 # Apply origin_y calibration on vertical axis (for Z height)

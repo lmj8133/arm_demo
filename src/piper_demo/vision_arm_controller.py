@@ -282,21 +282,21 @@ class VisionArmController:
     ) -> Tuple[float, float, float, float, float, float]:
         """Compute target pose from normalized camera coordinates.
 
-        XZ plane tracking: camera horizontal -> arm X, camera vertical -> arm Z.
-        Y stays fixed at workspace center.
+        YZ plane tracking: camera horizontal -> arm Y, camera vertical -> arm Z.
+        X stays fixed at workspace center.
 
         Args:
-            y_cam: Camera horizontal coordinate (0-1) -> Arm X (front-back)
+            y_cam: Camera horizontal coordinate (0-1) -> Arm Y (left-right)
             z_cam: Camera vertical coordinate (0-1) -> Arm Z (height)
 
         Returns:
             (x, y, z, roll, pitch, yaw) in meters and radians (REP-103 convention)
         """
-        # Map camera coords to arm XZ (front-back + height)
-        x_arm, z_arm = self.camera_mapping.camera_to_arm_xz(y_cam, z_cam)
+        # Map camera coords to arm YZ (left-right + height)
+        y_arm, z_arm = self.camera_mapping.camera_to_arm_yz(y_cam, z_cam)
 
-        # Y stays fixed at workspace center
-        y_arm = self.config.workspace.y_arm.center()
+        # X stays fixed at workspace center
+        x_arm = self.config.workspace.x_arm.center()
 
         # Get orientation
         roll, pitch, yaw = self.config.orientation.to_radians()
