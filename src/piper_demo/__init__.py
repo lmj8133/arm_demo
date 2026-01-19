@@ -23,7 +23,7 @@ from .utils import check_can_interface, deg_to_rad, rad_to_deg, format_end_pose
 from .coordinate_mapping import (
     CameraMappingConfig,
     CameraMapping,
-    SafePlaneProjector,
+    SafeHeightProjector,
     WorkspaceBounds,
     AxisBounds,
 )
@@ -51,7 +51,7 @@ __all__ = [
     # Coordinate mapping
     "CameraMappingConfig",
     "CameraMapping",
-    "SafePlaneProjector",
+    "SafeHeightProjector",
     "WorkspaceBounds",
     "AxisBounds",
     # Vision arm controller
