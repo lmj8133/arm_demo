@@ -165,12 +165,20 @@ class PiperConnection:
         except Exception:
             return False
 
+    def _is_any_motor_enabled(self) -> bool:
+        """Check if any motor is currently enabled."""
+        try:
+            status = self.piper.GetArmEnableStatus()
+            return any(status)
+        except Exception:
+            return False
+
     def reset(self, max_retries: int = 3, delay_sec: float = 0.3) -> None:
         """Reset arm from teaching/MIT mode to position-velocity mode.
 
-        Use this when arm is stuck in TEACHING_MODE and won't respond to commands.
-        Sequence: DisableArm -> MotionCtrl_1 (exit teaching) -> MotionCtrl_2 (CAN mode).
-        Retries if still in teaching mode.
+        Auto-detects current state:
+        - If in teaching mode or motors enabled: DisableArm first
+        - If fresh boot (standby, disabled): skip DisableArm
 
         Args:
             max_retries: Maximum number of reset attempts (default: 3)
@@ -180,12 +188,14 @@ class PiperConnection:
             raise PiperConnectionError("Not connected to Piper arm")
 
         for _attempt in range(max_retries):
-            # Step 1: Disable arm first to reset state
-            self.piper.DisableArm(7)
-            time.sleep(delay_sec)
+            # Step 1: Only disable if in teaching mode or motors are enabled
+            need_disable = self.is_in_teaching_mode() or self._is_any_motor_enabled()
+            if need_disable:
+                self.piper.DisableArm(7)
+                time.sleep(delay_sec)
 
-            # Step 2: Exit drag teaching mode AND resume from emergency stop
-            self.piper.MotionCtrl_1(0x02, 0, 0x02)
+            # Step 2: Reset/Restore (use simple reset, not E-stop resume)
+            self.piper.MotionCtrl_1(0x02, 0, 0)
             time.sleep(delay_sec)
 
             # Step 3: Switch to CAN control mode (MIT mode off)
@@ -197,9 +207,10 @@ class PiperConnection:
                 return  # Success
 
         # Final attempt without verification (best effort)
-        self.piper.DisableArm(7)
-        time.sleep(delay_sec)
-        self.piper.MotionCtrl_1(0x02, 0, 0x02)
+        if self.is_in_teaching_mode() or self._is_any_motor_enabled():
+            self.piper.DisableArm(7)
+            time.sleep(delay_sec)
+        self.piper.MotionCtrl_1(0x02, 0, 0)
         time.sleep(delay_sec)
         self.piper.MotionCtrl_2(0x01, 0x01, 30, 0x00)
         time.sleep(delay_sec)
