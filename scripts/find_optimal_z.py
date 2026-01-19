@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Find optimal Y height for maximizing XZ reachable area.
+"""Find optimal Z height for maximizing XY reachable area.
 
-Samples Y values and calculates the convex hull area of IK-reachable points
-in the XZ plane. Outputs the Y value with the largest reachable area.
+Samples Z values (height, REP-103 convention) and calculates the convex hull
+area of IK-reachable points in the XY plane. Outputs the Z value with the
+largest reachable area.
 
 Usage:
-    uv run python scripts/find_optimal_y.py
-    uv run python scripts/find_optimal_y.py --y-min 0.05 --y-max 0.15 --y-steps 20
-    uv run python scripts/find_optimal_y.py --xz-samples 30 --verbose
+    uv run python scripts/find_optimal_z.py
+    uv run python scripts/find_optimal_z.py --z-min 0.05 --z-max 0.15 --z-steps 20
+    uv run python scripts/find_optimal_z.py --xy-samples 30 --verbose
 
 Output:
-    Prints reachable area for each Y value and the optimal Y at the end.
+    Prints reachable area for each Z value and the optimal Z at the end.
 """
 
 import argparse
@@ -26,7 +27,7 @@ from kinematics import forward_kinematics
 from inverse_kinematics import inverse_kinematics, IKConfig
 
 # HOME_POSITION from PiperConnection (copied to avoid piper_sdk dependency)
-# Y=16mm, optimized for XZ reach
+# Z=16mm (height), optimized for XY reach
 HOME_POSITION = [1.59868, 0.27609, -0.83856, 0.04926, 0.67869, -0.7526]
 
 
@@ -34,7 +35,7 @@ def convex_hull_area(points: list[tuple[float, float]]) -> float:
     """Compute convex hull area using gift wrapping + shoelace formula.
 
     Args:
-        points: List of (x, z) tuples
+        points: List of (x, y) tuples
 
     Returns:
         Area of convex hull in square meters
@@ -92,48 +93,48 @@ def convex_hull_area(points: list[tuple[float, float]]) -> float:
 
 
 def compute_reachable_area(
-    y_height: float,
+    z_height: float,
     x_range: tuple[float, float],
-    z_range: tuple[float, float],
+    y_range: tuple[float, float],
     roll: float,
     pitch: float,
     yaw: float,
-    xz_samples: int,
+    xy_samples: int,
     initial_guess: list[float],
     ik_config: IKConfig,
 ) -> tuple[float, list[tuple[float, float]]]:
-    """Compute reachable area in XZ plane at given Y height.
+    """Compute reachable area in XY plane at given Z height (REP-103 convention).
 
     Args:
-        y_height: Y coordinate in meters
-        x_range: (x_min, x_max) in meters
-        z_range: (z_min, z_max) in meters
+        z_height: Z coordinate (height) in meters
+        x_range: (x_min, x_max) in meters (forward/backward)
+        y_range: (y_min, y_max) in meters (left/right)
         roll, pitch, yaw: Target orientation in radians
-        xz_samples: Number of samples per axis
+        xy_samples: Number of samples per axis
         initial_guess: Initial joint angles for IK
         ik_config: IK solver configuration
 
     Returns:
-        (area_m2, list of reachable (x, z) points)
+        (area_m2, list of reachable (x, y) points)
     """
     reachable_points = []
     x_min, x_max = x_range
-    z_min, z_max = z_range
+    y_min, y_max = y_range
 
-    for i in range(xz_samples):
-        for j in range(xz_samples):
-            x = x_min + (x_max - x_min) * i / (xz_samples - 1)
-            z = z_min + (z_max - z_min) * j / (xz_samples - 1)
+    for i in range(xy_samples):
+        for j in range(xy_samples):
+            x = x_min + (x_max - x_min) * i / (xy_samples - 1)
+            y = y_min + (y_max - y_min) * j / (xy_samples - 1)
 
             result = inverse_kinematics(
-                x, y_height, z,
+                x, y, z_height,
                 roll, pitch, yaw,
                 initial_guess=initial_guess,
                 config=ik_config,
             )
 
             if result.converged:
-                reachable_points.append((x, z))
+                reachable_points.append((x, y))
                 # Use solution as next initial guess for better convergence
                 initial_guess = result.joint_angles
 
@@ -143,43 +144,43 @@ def compute_reachable_area(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find optimal Y height for maximum XZ reachable area"
+        description="Find optimal Z height for maximum XY reachable area (REP-103)"
     )
     parser.add_argument(
-        "--y-min",
+        "--z-min",
         type=float,
         default=None,
-        help="Minimum Y height in meters (default: HOME_Y - 0.05)",
+        help="Minimum Z height in meters (default: HOME_Z - 0.05)",
     )
     parser.add_argument(
-        "--y-max",
+        "--z-max",
         type=float,
         default=None,
-        help="Maximum Y height in meters (default: HOME_Y + 0.10)",
+        help="Maximum Z height in meters (default: HOME_Z + 0.10)",
     )
     parser.add_argument(
-        "--y-range-below",
+        "--z-range-below",
         type=float,
         default=0.05,
-        help="Y search range below HOME (default: 0.05 = 50mm)",
+        help="Z search range below HOME (default: 0.05 = 50mm)",
     )
     parser.add_argument(
-        "--y-range-above",
+        "--z-range-above",
         type=float,
         default=0.10,
-        help="Y search range above HOME (default: 0.10 = 100mm)",
+        help="Z search range above HOME (default: 0.10 = 100mm)",
     )
     parser.add_argument(
-        "--y-steps",
+        "--z-steps",
         type=int,
         default=11,
-        help="Number of Y samples (default: 11)",
+        help="Number of Z samples (default: 11)",
     )
     parser.add_argument(
-        "--xz-samples",
+        "--xy-samples",
         type=int,
         default=20,
-        help="Samples per XZ axis (default: 20)",
+        help="Samples per XY axis (default: 20)",
     )
     parser.add_argument(
         "--x-range",
@@ -190,18 +191,18 @@ def main():
         help="X range in meters (default: HOME_X ± 0.15)",
     )
     parser.add_argument(
-        "--z-range",
+        "--y-range",
         type=float,
         nargs=2,
         default=None,
-        metavar=("Z_MIN", "Z_MAX"),
-        help="Z range in meters (default: HOME_Z ± 0.15)",
+        metavar=("Y_MIN", "Y_MAX"),
+        help="Y range in meters (default: HOME_Y ± 0.15)",
     )
     parser.add_argument(
-        "--xz-range",
+        "--xy-range",
         type=float,
         default=0.15,
-        help="Half-range for X and Z centered on HOME (default: 0.15 = ±150mm)",
+        help="Half-range for X and Y centered on HOME (default: 0.15 = ±150mm)",
     )
     parser.add_argument(
         "--verbose",
@@ -216,7 +217,8 @@ def main():
     home_fk = forward_kinematics(home_joints)
 
     print("=" * 60)
-    print("Find Optimal Y Height for Maximum XZ Reachable Area")
+    print("Find Optimal Z Height for Maximum XY Reachable Area")
+    print("(REP-103: X=front, Y=left, Z=up)")
     print("=" * 60)
     print()
     print(f"HOME_POSITION FK:")
@@ -226,26 +228,26 @@ def main():
     print(f"  Orientation: roll={r_deg:.1f}°, pitch={p_deg:.1f}°, yaw={yw_deg:.1f}°")
     print()
 
-    # Compute Y range centered on HOME position
-    y_min = args.y_min if args.y_min is not None else home_fk.y - args.y_range_below
-    y_max = args.y_max if args.y_max is not None else home_fk.y + args.y_range_above
+    # Compute Z range centered on HOME position
+    z_min = args.z_min if args.z_min is not None else home_fk.z - args.z_range_below
+    z_max = args.z_max if args.z_max is not None else home_fk.z + args.z_range_above
 
-    # Compute X/Z ranges centered on HOME position
+    # Compute X/Y ranges centered on HOME position
     if args.x_range is not None:
         x_range = tuple(args.x_range)
     else:
-        x_range = (home_fk.x - args.xz_range, home_fk.x + args.xz_range)
+        x_range = (home_fk.x - args.xy_range, home_fk.x + args.xy_range)
 
-    if args.z_range is not None:
-        z_range = tuple(args.z_range)
+    if args.y_range is not None:
+        y_range = tuple(args.y_range)
     else:
-        z_range = (home_fk.z - args.xz_range, home_fk.z + args.xz_range)
+        y_range = (home_fk.y - args.xy_range, home_fk.y + args.xy_range)
 
     print(f"Search parameters:")
-    print(f"  Y range: {y_min*1000:.0f} ~ {y_max*1000:.0f} mm ({args.y_steps} steps)")
-    print(f"  X range: {x_range[0]*1000:.0f} ~ {x_range[1]*1000:.0f} mm")
-    print(f"  Z range: {z_range[0]*1000:.0f} ~ {z_range[1]*1000:.0f} mm")
-    print(f"  XZ grid: {args.xz_samples}x{args.xz_samples} = {args.xz_samples**2} samples per Y")
+    print(f"  Z (height) range: {z_min*1000:.0f} ~ {z_max*1000:.0f} mm ({args.z_steps} steps)")
+    print(f"  X (front/back) range: {x_range[0]*1000:.0f} ~ {x_range[1]*1000:.0f} mm")
+    print(f"  Y (left/right) range: {y_range[0]*1000:.0f} ~ {y_range[1]*1000:.0f} mm")
+    print(f"  XY grid: {args.xy_samples}x{args.xy_samples} = {args.xy_samples**2} samples per Z")
     print()
 
     # IK configuration
@@ -260,24 +262,24 @@ def main():
     roll, pitch, yaw = home_fk.roll, home_fk.pitch, home_fk.yaw
 
     results = []
-    best_y = None
+    best_z = None
     best_area = 0.0
     best_count = 0
 
-    print("Scanning Y values...")
+    print("Scanning Z values...")
     print("-" * 60)
 
-    for i in range(args.y_steps):
-        y = y_min + (y_max - y_min) * i / (args.y_steps - 1)
+    for i in range(args.z_steps):
+        z = z_min + (z_max - z_min) * i / (args.z_steps - 1)
 
         area, points = compute_reachable_area(
-            y_height=y,
+            z_height=z,
             x_range=x_range,
-            z_range=z_range,
+            y_range=y_range,
             roll=roll,
             pitch=pitch,
             yaw=yaw,
-            xz_samples=args.xz_samples,
+            xy_samples=args.xy_samples,
             initial_guess=list(home_joints),
             ik_config=ik_config,
         )
@@ -285,42 +287,42 @@ def main():
         # Convert to cm² for readability
         area_cm2 = area * 10000
 
-        results.append((y, area_cm2, len(points)))
+        results.append((z, area_cm2, len(points)))
 
         marker = ""
         if area > best_area:
-            best_y = y
+            best_z = z
             best_area = area
             best_count = len(points)
             marker = " <- Best"
 
-        print(f"Y={y*1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}")
+        print(f"Z={z*1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}")
 
         if args.verbose and points:
             x_vals = [p[0] for p in points]
-            z_vals = [p[1] for p in points]
+            y_vals = [p[1] for p in points]
             print(f"             X: [{min(x_vals)*1000:.0f}, {max(x_vals)*1000:.0f}] mm")
-            print(f"             Z: [{min(z_vals)*1000:.0f}, {max(z_vals)*1000:.0f}] mm")
+            print(f"             Y: [{min(y_vals)*1000:.0f}, {max(y_vals)*1000:.0f}] mm")
 
     print("-" * 60)
     print()
 
-    if best_y is not None:
+    if best_z is not None:
         print("=" * 60)
         print("RESULT")
         print("=" * 60)
-        print(f"Optimal Y: {best_y*1000:.1f} mm ({best_y:.5f} m)")
-        print(f"Reachable area: {best_area*10000:.1f} cm²")
-        print(f"IK-solvable points: {best_count}/{args.xz_samples**2}")
+        print(f"Optimal Z (height): {best_z*1000:.1f} mm ({best_z:.5f} m)")
+        print(f"Reachable XY area: {best_area*10000:.1f} cm²")
+        print(f"IK-solvable points: {best_count}/{args.xy_samples**2}")
         print()
         print("Usage in code:")
-        print(f"  override_y={best_y:.5f}  # meters")
+        print(f"  override_z={best_z:.5f}  # meters")
         print()
 
-        # Compare with home Y
-        home_y_mm = home_fk.y * 1000
-        delta = best_y * 1000 - home_y_mm
-        print(f"HOME Y: {home_y_mm:.1f} mm")
+        # Compare with home Z
+        home_z_mm = home_fk.z * 1000
+        delta = best_z * 1000 - home_z_mm
+        print(f"HOME Z: {home_z_mm:.1f} mm")
         print(f"Delta: {delta:+.1f} mm")
     else:
         print("[ERROR] No reachable points found in the search range!")

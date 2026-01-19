@@ -271,12 +271,12 @@ def main():
             PiperConnection.HOME_POSITION, reader, motion
         )
 
-        # Show workspace info
+        # Show workspace info (REP-103: X=front, Y=left, Z=up)
         ws = controller.config.workspace
         x_mm, y_mm, z_mm = home_fk.position_mm()
         print(f"[INFO] HOME FK: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
-        print(f"[INFO] Workspace X: {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm")
-        print(f"[INFO] Workspace Z: {ws.z_arm.min*1000:.0f} ~ {ws.z_arm.max*1000:.0f} mm")
+        print(f"[INFO] Workspace X (front/back): {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm")
+        print(f"[INFO] Workspace Y (left/right): {ws.y_arm.min*1000:.0f} ~ {ws.y_arm.max*1000:.0f} mm")
 
         print("[OK] Arm ready!")
 
@@ -321,10 +321,12 @@ def main():
             # Process detection
             if detection and tracking_enabled:
                 # Get normalized center
-                # Camera X -> Arm Y, Camera Y -> Arm Z
+                # REP-103 coordinate mapping:
+                # Image X (horizontal) -> Arm Y (left-right)
+                # Image Y (vertical) -> Arm X (front-back)
                 norm_x, norm_y = detection.normalized_center(w, h)
-                target_y = norm_x  # Camera horizontal -> Arm Y
-                target_z = norm_y  # Camera vertical -> Arm Z
+                target_y = norm_x  # Camera horizontal -> cam Y -> Arm Y (left-right)
+                target_z = norm_y  # Camera vertical -> cam Z -> Arm X (front-back)
 
                 # Check if we should move
                 if should_move(

@@ -1,12 +1,17 @@
 """Coordinate mapping for camera-to-arm projection.
 
 Maps normalized camera coordinates (0-1) to robot arm workspace coordinates,
-with configurable workspace bounds and safe Y-axis projection strategies.
+with configurable workspace bounds and safe Z-axis (height) projection strategies.
+
+Coordinate system follows ROS REP-103 convention:
+    - Arm X: forward/backward (前後)
+    - Arm Y: left/right (左右)
+    - Arm Z: up/down (高度)
 
 Coordinate mapping:
-    - Camera Y (horizontal, 0→1) → Arm Z (left-right)
+    - Camera Y (horizontal, 0→1) → Arm Y (left-right)
     - Camera Z (vertical, 0→1)   → Arm X (front-back, inverted)
-    - Arm Y (height)             → Dynamically computed for safety
+    - Arm Z (height)             → Dynamically computed for safety
 """
 
 import math
@@ -40,13 +45,16 @@ class AxisBounds:
 
 @dataclass
 class WorkspaceBounds:
-    """3D workspace boundary definition for the arm.
+    """3D workspace boundary definition for the arm (REP-103 convention).
 
-    Defines the reachable/safe workspace in arm coordinates.
+    Defines the reachable/safe workspace in arm coordinates:
+        - x_arm: forward/backward (前後)
+        - y_arm: left/right (左右)
+        - z_arm: up/down (高度)
     """
     x_arm: AxisBounds = field(default_factory=lambda: AxisBounds(0.10, 0.35))
-    z_arm: AxisBounds = field(default_factory=lambda: AxisBounds(-0.15, 0.15))
-    y_arm: AxisBounds = field(default_factory=lambda: AxisBounds(0.05, 0.25))
+    y_arm: AxisBounds = field(default_factory=lambda: AxisBounds(-0.15, 0.15))
+    z_arm: AxisBounds = field(default_factory=lambda: AxisBounds(0.05, 0.25))
 
     def clamp_position(self, x: float, y: float, z: float) -> Tuple[float, float, float]:
         """Clamp position to workspace bounds."""
@@ -68,53 +76,53 @@ class WorkspaceBounds:
 
 
 @dataclass
-class SafePlaneConfig:
-    """Configuration for safe Y-axis (height) projection.
+class SafeHeightConfig:
+    """Configuration for safe Z-axis (height) projection (REP-103 convention).
 
     Strategies:
-        - "constant": Fixed Y value (base_y)
-        - "adaptive": Y varies based on XZ distance from center
+        - "constant": Fixed Z value (base_z)
+        - "adaptive": Z varies based on XY distance from center
     """
     strategy: str = "adaptive"
     # Constant strategy
-    base_y: float = 0.10  # meters
+    base_z: float = 0.10  # meters
     # Adaptive strategy parameters
-    distance_factor: float = 0.05  # Y increase per meter from center
-    y_min: float = 0.05  # meters
-    y_max: float = 0.25  # meters
+    distance_factor: float = 0.05  # Z increase per meter from center
+    z_min: float = 0.05  # meters
+    z_max: float = 0.25  # meters
 
-    def compute_y(
-        self, x_arm: float, z_arm: float, workspace: WorkspaceBounds
+    def compute_z(
+        self, x_arm: float, y_arm: float, workspace: WorkspaceBounds
     ) -> float:
-        """Compute safe Y value based on strategy.
+        """Compute safe Z value based on strategy.
 
         Args:
             x_arm: Target X position in arm coordinates (meters)
-            z_arm: Target Z position in arm coordinates (meters)
+            y_arm: Target Y position in arm coordinates (meters)
             workspace: Workspace bounds for reference
 
         Returns:
-            Safe Y value in meters
+            Safe Z value in meters
         """
         if self.strategy == "constant":
-            return self.base_y
+            return self.base_z
 
         elif self.strategy == "adaptive":
             # Calculate distance from workspace center
             x_center = workspace.x_arm.center()
-            z_center = workspace.z_arm.center()
+            y_center = workspace.y_arm.center()
             dx = x_arm - x_center
-            dz = z_arm - z_center
-            distance = math.sqrt(dx * dx + dz * dz)
+            dy = y_arm - y_center
+            distance = math.sqrt(dx * dx + dy * dy)
 
-            # Increase Y as we move further from center
-            y = self.base_y + distance * self.distance_factor
+            # Increase Z as we move further from center
+            z = self.base_z + distance * self.distance_factor
 
             # Clamp to safe range
-            return max(self.y_min, min(self.y_max, y))
+            return max(self.z_min, min(self.z_max, z))
 
         else:
-            raise ValueError(f"Unknown safe plane strategy: {self.strategy}")
+            raise ValueError(f"Unknown safe height strategy: {self.strategy}")
 
 
 @dataclass
@@ -145,16 +153,17 @@ class MotionConfig:
 class CameraMappingConfig:
     """Complete configuration for camera-to-arm coordinate mapping.
 
-    Example YAML:
+    Example YAML (REP-103 convention):
         workspace:
-          z_arm: { min: -0.15, max: 0.15 }
-          x_arm: { min: 0.10, max: 0.35 }
-        safe_plane:
+          x_arm: { min: 0.10, max: 0.35 }  # forward/backward
+          y_arm: { min: -0.15, max: 0.15 } # left/right
+          z_arm: { min: 0.05, max: 0.25 }  # height
+        safe_height:
           strategy: "adaptive"
-          base_y: 0.10
+          base_z: 0.10
           distance_factor: 0.05
-          y_min: 0.05
-          y_max: 0.25
+          z_min: 0.05
+          z_max: 0.25
         orientation:
           roll: 0.0
           pitch: 90.0
@@ -164,7 +173,7 @@ class CameraMappingConfig:
           singularity_check: true
     """
     workspace: WorkspaceBounds = field(default_factory=WorkspaceBounds)
-    safe_plane: SafePlaneConfig = field(default_factory=SafePlaneConfig)
+    safe_height: SafeHeightConfig = field(default_factory=SafeHeightConfig)
     orientation: OrientationConfig = field(default_factory=OrientationConfig)
     motion: MotionConfig = field(default_factory=MotionConfig)
 
@@ -204,24 +213,24 @@ class CameraMappingConfig:
             if "y_arm" in ws:
                 config.workspace.y_arm = AxisBounds(**ws["y_arm"])
 
-        if "safe_plane" in data:
-            sp = data["safe_plane"]
-            config.safe_plane = SafePlaneConfig(
-                strategy=sp.get("strategy", "adaptive"),
-                base_y=sp.get("base_y", 0.10),
-                distance_factor=sp.get("distance_factor", 0.05),
-                y_min=sp.get("y_min", 0.05),
-                y_max=sp.get("y_max", 0.25),
+        if "safe_height" in data:
+            sh = data["safe_height"]
+            config.safe_height = SafeHeightConfig(
+                strategy=sh.get("strategy", "adaptive"),
+                base_z=sh.get("base_z", 0.10),
+                distance_factor=sh.get("distance_factor", 0.05),
+                z_min=sh.get("z_min", 0.05),
+                z_max=sh.get("z_max", 0.25),
             )
             # Handle nested adaptive config
-            if "adaptive" in sp:
-                adaptive = sp["adaptive"]
-                config.safe_plane.base_y = adaptive.get("base_y", config.safe_plane.base_y)
-                config.safe_plane.distance_factor = adaptive.get(
-                    "distance_factor", config.safe_plane.distance_factor
+            if "adaptive" in sh:
+                adaptive = sh["adaptive"]
+                config.safe_height.base_z = adaptive.get("base_z", config.safe_height.base_z)
+                config.safe_height.distance_factor = adaptive.get(
+                    "distance_factor", config.safe_height.distance_factor
                 )
-                config.safe_plane.y_min = adaptive.get("y_min", config.safe_plane.y_min)
-                config.safe_plane.y_max = adaptive.get("y_max", config.safe_plane.y_max)
+                config.safe_height.z_min = adaptive.get("z_min", config.safe_height.z_min)
+                config.safe_height.z_max = adaptive.get("z_max", config.safe_height.z_max)
 
         if "orientation" in data:
             ori = data["orientation"]
@@ -246,15 +255,15 @@ class CameraMappingConfig:
         return {
             "workspace": {
                 "x_arm": {"min": self.workspace.x_arm.min, "max": self.workspace.x_arm.max},
-                "z_arm": {"min": self.workspace.z_arm.min, "max": self.workspace.z_arm.max},
                 "y_arm": {"min": self.workspace.y_arm.min, "max": self.workspace.y_arm.max},
+                "z_arm": {"min": self.workspace.z_arm.min, "max": self.workspace.z_arm.max},
             },
-            "safe_plane": {
-                "strategy": self.safe_plane.strategy,
-                "base_y": self.safe_plane.base_y,
-                "distance_factor": self.safe_plane.distance_factor,
-                "y_min": self.safe_plane.y_min,
-                "y_max": self.safe_plane.y_max,
+            "safe_height": {
+                "strategy": self.safe_height.strategy,
+                "base_z": self.safe_height.base_z,
+                "distance_factor": self.safe_height.distance_factor,
+                "z_min": self.safe_height.z_min,
+                "z_max": self.safe_height.z_max,
             },
             "orientation": {
                 "roll": self.orientation.roll,
@@ -288,13 +297,13 @@ class CameraMapping:
         - Y_cam: horizontal axis (0=left, 1=right)
         - Z_cam: vertical axis (0=top, 1=bottom)
 
-    Arm coordinate system (meters):
-        - X_arm: forward/backward
-        - Y_arm: up/down (height)
-        - Z_arm: left/right
+    Arm coordinate system (REP-103 convention, meters):
+        - X_arm: forward/backward (前後)
+        - Y_arm: left/right (左右)
+        - Z_arm: up/down (高度)
 
     Mapping:
-        - Camera Y → Arm Z (with inversion option)
+        - Camera Y → Arm Y (with inversion option)
         - Camera Z → Arm X (with inversion)
     """
 
@@ -316,10 +325,53 @@ class CameraMapping:
         self.invert_cam_y = invert_cam_y
         self.invert_cam_z = invert_cam_z
 
+    def camera_to_arm_xy(
+        self, y_cam: float, z_cam: float, clamp: bool = True
+    ) -> Tuple[float, float]:
+        """Convert normalized camera coordinates to arm X and Y.
+
+        Args:
+            y_cam: Camera horizontal coordinate (0-1)
+            z_cam: Camera vertical coordinate (0-1)
+            clamp: If True, clamp output to workspace bounds
+
+        Returns:
+            (x_arm, y_arm) in meters
+        """
+        # Normalize input to 0-1 range
+        y_cam = max(0.0, min(1.0, y_cam))
+        z_cam = max(0.0, min(1.0, z_cam))
+
+        # Apply inversions
+        if self.invert_cam_y:
+            y_cam = 1.0 - y_cam
+        if self.invert_cam_z:
+            z_cam = 1.0 - z_cam
+
+        # Map camera Y (0-1) → arm Y (left-right)
+        y_arm = (
+            self.config.workspace.y_arm.min
+            + y_cam * self.config.workspace.y_arm.range()
+        )
+
+        # Map camera Z (0-1) → arm X (front-back)
+        x_arm = (
+            self.config.workspace.x_arm.min
+            + z_cam * self.config.workspace.x_arm.range()
+        )
+
+        if clamp:
+            x_arm = self.config.workspace.x_arm.clamp(x_arm)
+            y_arm = self.config.workspace.y_arm.clamp(y_arm)
+
+        return x_arm, y_arm
+
     def camera_to_arm_xz(
         self, y_cam: float, z_cam: float, clamp: bool = True
     ) -> Tuple[float, float]:
         """Convert normalized camera coordinates to arm X and Z.
+
+        For XZ plane tracking (front-back + height).
 
         Args:
             y_cam: Camera horizontal coordinate (0-1)
@@ -339,16 +391,16 @@ class CameraMapping:
         if self.invert_cam_z:
             z_cam = 1.0 - z_cam
 
-        # Map camera Y (0-1) → arm Z
-        z_arm = (
-            self.config.workspace.z_arm.min
-            + y_cam * self.config.workspace.z_arm.range()
-        )
-
-        # Map camera Z (0-1) → arm X
+        # Map camera Y (horizontal, 0-1) → arm X (front-back)
         x_arm = (
             self.config.workspace.x_arm.min
-            + z_cam * self.config.workspace.x_arm.range()
+            + y_cam * self.config.workspace.x_arm.range()
+        )
+
+        # Map camera Z (vertical, 0-1) → arm Z (height)
+        z_arm = (
+            self.config.workspace.z_arm.min
+            + z_cam * self.config.workspace.z_arm.range()
         )
 
         if clamp:
@@ -357,20 +409,64 @@ class CameraMapping:
 
         return x_arm, z_arm
 
-    def arm_to_camera(self, x_arm: float, z_arm: float) -> Tuple[float, float]:
-        """Convert arm X and Z coordinates back to normalized camera coordinates.
+    def camera_to_arm_yz(
+        self, y_cam: float, z_cam: float, clamp: bool = True
+    ) -> Tuple[float, float]:
+        """Convert normalized camera coordinates to arm Y and Z.
+
+        For YZ plane tracking (left-right + height).
+        Camera placed beside the arm, facing +X direction.
 
         Args:
-            x_arm: Arm X coordinate in meters
-            z_arm: Arm Z coordinate in meters
+            y_cam: Camera horizontal coordinate (0-1) -> Arm Y
+            z_cam: Camera vertical coordinate (0-1) -> Arm Z
+            clamp: If True, clamp output to workspace bounds
+
+        Returns:
+            (y_arm, z_arm) in meters
+        """
+        # Normalize input to 0-1 range
+        y_cam = max(0.0, min(1.0, y_cam))
+        z_cam = max(0.0, min(1.0, z_cam))
+
+        # Apply inversions
+        if self.invert_cam_y:
+            y_cam = 1.0 - y_cam
+        if self.invert_cam_z:
+            z_cam = 1.0 - z_cam
+
+        # Map camera Y (horizontal, 0-1) → arm Y (left-right)
+        y_arm = (
+            self.config.workspace.y_arm.min
+            + y_cam * self.config.workspace.y_arm.range()
+        )
+
+        # Map camera Z (vertical, 0-1) → arm Z (height)
+        z_arm = (
+            self.config.workspace.z_arm.min
+            + z_cam * self.config.workspace.z_arm.range()
+        )
+
+        if clamp:
+            y_arm = self.config.workspace.y_arm.clamp(y_arm)
+            z_arm = self.config.workspace.z_arm.clamp(z_arm)
+
+        return y_arm, z_arm
+
+    def arm_to_camera(self, x_arm: float, y_arm: float) -> Tuple[float, float]:
+        """Convert arm X and Y coordinates back to normalized camera coordinates.
+
+        Args:
+            x_arm: Arm X coordinate in meters (forward/backward)
+            y_arm: Arm Y coordinate in meters (left/right)
 
         Returns:
             (y_cam, z_cam) normalized 0-1
         """
-        # Map arm Z → camera Y
-        z_range = self.config.workspace.z_arm.range()
-        if z_range > 0:
-            y_cam = (z_arm - self.config.workspace.z_arm.min) / z_range
+        # Map arm Y → camera Y
+        y_range = self.config.workspace.y_arm.range()
+        if y_range > 0:
+            y_cam = (y_arm - self.config.workspace.y_arm.min) / y_range
         else:
             y_cam = 0.5
 
@@ -390,46 +486,46 @@ class CameraMapping:
         return y_cam, z_cam
 
 
-class SafePlaneProjector:
-    """Computes safe Y (height) values for arm positions.
+class SafeHeightProjector:
+    """Computes safe Z (height) values for arm positions (REP-103 convention).
 
     Ensures the end-effector maintains a safe height above the workspace
     while avoiding singularities.
     """
 
     def __init__(self, config: CameraMappingConfig):
-        """Initialize SafePlaneProjector.
+        """Initialize SafeHeightProjector.
 
         Args:
             config: Camera mapping configuration
         """
         self.config = config
 
-    def compute_y(self, x_arm: float, z_arm: float) -> float:
-        """Compute safe Y value for given X and Z position.
+    def compute_z(self, x_arm: float, y_arm: float) -> float:
+        """Compute safe Z value for given X and Y position.
 
         Args:
-            x_arm: Target X position in meters
-            z_arm: Target Z position in meters
+            x_arm: Target X position in meters (forward/backward)
+            y_arm: Target Y position in meters (left/right)
 
         Returns:
-            Safe Y value in meters
+            Safe Z value in meters (height)
         """
-        return self.config.safe_plane.compute_y(
-            x_arm, z_arm, self.config.workspace
+        return self.config.safe_height.compute_z(
+            x_arm, y_arm, self.config.workspace
         )
 
     def compute_full_position(
-        self, x_arm: float, z_arm: float
+        self, x_arm: float, y_arm: float
     ) -> Tuple[float, float, float]:
-        """Compute full (X, Y, Z) position with safe Y.
+        """Compute full (X, Y, Z) position with safe Z height.
 
         Args:
-            x_arm: Target X position in meters
-            z_arm: Target Z position in meters
+            x_arm: Target X position in meters (forward/backward)
+            y_arm: Target Y position in meters (left/right)
 
         Returns:
             (x_arm, y_arm, z_arm) in meters
         """
-        y_arm = self.compute_y(x_arm, z_arm)
+        z_arm = self.compute_z(x_arm, y_arm)
         return x_arm, y_arm, z_arm

@@ -26,7 +26,7 @@ from .coordinate_mapping import (
     AxisBounds,
     CameraMappingConfig,
     CameraMapping,
-    SafePlaneProjector,
+    SafeHeightProjector,
 )
 from .kinematics import forward_kinematics, FKResult
 from .inverse_kinematics import inverse_kinematics, IKConfig
@@ -37,12 +37,18 @@ from .motion import MotionController
 
 @dataclass
 class MoveResult:
-    """Result of a vision-guided move operation."""
+    """Result of a vision-guided move operation.
 
-    # Target position in arm coordinates (meters)
-    x_arm: float
-    y_arm: float
-    z_arm: float
+    Coordinate system follows ROS REP-103 convention:
+        - x_arm: forward/backward (前後)
+        - y_arm: left/right (左右)
+        - z_arm: up/down (高度)
+    """
+
+    # Target position in arm coordinates (meters, REP-103)
+    x_arm: float  # forward/backward
+    y_arm: float  # left/right
+    z_arm: float  # height
 
     # Target orientation (radians)
     roll: float
@@ -81,10 +87,15 @@ class VisionArmController:
     """High-level controller for vision-guided arm movements.
 
     Integrates:
-        - CameraMapping: normalized camera coords → arm XZ
-        - SafePlaneProjector: compute safe Y height
+        - CameraMapping: normalized camera coords → arm XY
+        - SafeHeightProjector: compute safe Z height
         - IK solver: compute joint angles
         - MotionController: execute movement
+
+    Coordinate system follows ROS REP-103 convention:
+        - X: forward/backward
+        - Y: left/right
+        - Z: up/down (height)
 
     Example:
         controller = VisionArmController(config, reader, motion)
@@ -117,7 +128,7 @@ class VisionArmController:
         self.camera_mapping = CameraMapping(
             config, invert_cam_y=invert_cam_y, invert_cam_z=invert_cam_z
         )
-        self.projector = SafePlaneProjector(config)
+        self.projector = SafeHeightProjector(config)
 
         # Default IK configuration
         self.ik_config = IKConfig(
@@ -180,10 +191,10 @@ class VisionArmController:
         reader: JointReader,
         motion: MotionController,
         workspace_range_xz: float = 0.10,
-        workspace_range_y: float = 0.05,
+        workspace_range_z: float = 0.05,
         invert_cam_y: bool = False,
         invert_cam_z: bool = True,
-        override_y: Optional[float] = None,
+        override_z: Optional[float] = None,
     ) -> Tuple["VisionArmController", FKResult]:
         """Create controller with workspace centered on HOME_POSITION FK result.
 
@@ -191,17 +202,22 @@ class VisionArmController:
         of the given home joint angles, avoiding the common mismatch between
         hardcoded workspace bounds and the actual arm home position.
 
+        Coordinate system follows ROS REP-103 convention:
+            - X: forward/backward
+            - Y: left/right (XY plane for camera mapping)
+            - Z: up/down (height)
+
         Args:
             home_joints: 6 joint angles for home position (radians)
             reader: JointReader instance
             motion: MotionController instance
-            workspace_range_xz: Half-range for X and Z axes (meters, default ±100mm)
-            workspace_range_y: Half-range for Y axis (meters, default ±50mm)
+            workspace_range_xz: Half-range for X and Y axes (meters, default ±100mm)
+            workspace_range_z: Half-range for Z axis/height (meters, default ±50mm)
             invert_cam_y: Invert camera Y axis
             invert_cam_z: Invert camera Z axis
-            override_y: Use this Y height instead of home FK Y (meters).
-                        Useful for maximizing XZ reachable area. Use
-                        scripts/find_optimal_y.py to determine the optimal value.
+            override_z: Use this Z height instead of home FK Z (meters).
+                        Useful for maximizing XY reachable area. Use
+                        scripts/find_optimal_z.py to determine the optimal value.
 
         Returns:
             Tuple of (VisionArmController instance, FKResult of home position)
@@ -213,33 +229,33 @@ class VisionArmController:
             )
             print(f"Workspace centered at: {home_fk.position_mm()} mm")
 
-            # With override_y for larger XZ reach:
+            # With override_z for larger XY reach:
             controller, home_fk = VisionArmController.from_home_position(
                 PiperConnection.HOME_POSITION, reader, motion,
-                override_y=0.07  # 70mm, computed by find_optimal_y.py
+                override_z=0.07  # 70mm, computed by find_optimal_z.py
             )
         """
         # Compute FK for home position
         home_fk = forward_kinematics(home_joints)
 
-        # Use override_y if provided, otherwise use home FK Y
-        working_y = override_y if override_y is not None else home_fk.y
+        # Use override_z if provided, otherwise use home FK Z (height)
+        working_z = override_z if override_z is not None else home_fk.z
 
         # Build config centered on home FK
         config = CameraMappingConfig()
 
-        # Workspace bounds centered on home position (XZ) or working_y (Y)
+        # Workspace bounds centered on home position (XY) or working_z (Z)
         config.workspace.x_arm = AxisBounds(
             home_fk.x - workspace_range_xz,
             home_fk.x + workspace_range_xz,
         )
-        config.workspace.z_arm = AxisBounds(
-            home_fk.z - workspace_range_xz,
-            home_fk.z + workspace_range_xz,
-        )
         config.workspace.y_arm = AxisBounds(
-            working_y - workspace_range_y,
-            working_y + workspace_range_y,
+            home_fk.y - workspace_range_xz,
+            home_fk.y + workspace_range_xz,
+        )
+        config.workspace.z_arm = AxisBounds(
+            working_z - workspace_range_z,
+            working_z + workspace_range_z,
         )
 
         # Use home FK orientation
@@ -247,9 +263,9 @@ class VisionArmController:
         config.orientation.pitch = math.degrees(home_fk.pitch)
         config.orientation.yaw = math.degrees(home_fk.yaw)
 
-        # Use constant Y at working height for predictable motion
-        config.safe_plane.strategy = "constant"
-        config.safe_plane.base_y = working_y
+        # Use constant Z at working height for predictable motion
+        config.safe_height.strategy = "constant"
+        config.safe_height.base_z = working_z
 
         # Auto-adjust singularity threshold based on HOME position
         # If HOME is near singularity, use a smaller threshold to avoid false positives
@@ -266,18 +282,21 @@ class VisionArmController:
     ) -> Tuple[float, float, float, float, float, float]:
         """Compute target pose from normalized camera coordinates.
 
+        YZ plane tracking: camera horizontal -> arm Y, camera vertical -> arm Z.
+        X stays fixed at workspace center.
+
         Args:
-            y_cam: Camera horizontal coordinate (0-1)
-            z_cam: Camera vertical coordinate (0-1)
+            y_cam: Camera horizontal coordinate (0-1) -> Arm Y (left-right)
+            z_cam: Camera vertical coordinate (0-1) -> Arm Z (height)
 
         Returns:
-            (x, y, z, roll, pitch, yaw) in meters and radians
+            (x, y, z, roll, pitch, yaw) in meters and radians (REP-103 convention)
         """
-        # Map camera coords to arm XZ
-        x_arm, z_arm = self.camera_mapping.camera_to_arm_xz(y_cam, z_cam)
+        # Map camera coords to arm YZ (left-right + height)
+        y_arm, z_arm = self.camera_mapping.camera_to_arm_yz(y_cam, z_cam)
 
-        # Compute safe Y
-        y_arm = self.projector.compute_y(x_arm, z_arm)
+        # X stays fixed at workspace center
+        x_arm = self.config.workspace.x_arm.center()
 
         # Get orientation
         roll, pitch, yaw = self.config.orientation.to_radians()
@@ -387,20 +406,20 @@ class VisionArmController:
             (y_cam, z_cam) normalized 0-1
         """
         pose = self.reader.read_end_pose()
-        return self.camera_mapping.arm_to_camera(pose.x, pose.z)
+        return self.camera_mapping.arm_to_camera(pose.x, pose.y)
 
     def get_workspace_corners(self) -> List[Tuple[float, float, float]]:
         """Get workspace corner positions for visualization.
 
         Returns:
-            List of (x, y, z) corner positions in meters
+            List of (x, y, z) corner positions in meters (REP-103 convention)
         """
         corners = []
         ws = self.config.workspace
 
         for x in [ws.x_arm.min, ws.x_arm.max]:
-            for z in [ws.z_arm.min, ws.z_arm.max]:
-                y = self.projector.compute_y(x, z)
+            for y in [ws.y_arm.min, ws.y_arm.max]:
+                z = self.projector.compute_z(x, y)
                 corners.append((x, y, z))
 
         return corners
