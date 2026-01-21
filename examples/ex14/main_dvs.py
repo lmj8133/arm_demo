@@ -14,6 +14,7 @@ Usage:
 Controls (GUI and console):
     q     - Quit and safely disable arm
     space - Toggle tracking on/off (GUI only)
+    c     - Calibrate Y origin using current target position
     r     - Return to center position
     +/=   - Increase DVS threshold
     -     - Decrease DVS threshold
@@ -98,6 +99,7 @@ def draw_status(
     threshold: int,
     last_target: Optional[DVSTarget],
     last_move_result,
+    origin_y: float = 0.5,
 ) -> None:
     """Draw status overlay on frame."""
     h, w = frame.shape[:2]
@@ -153,8 +155,21 @@ def draw_status(
             1,
         )
 
+    # Origin calibration status
+    if origin_y != 0.5:
+        cal_text = f"Origin Y: {origin_y:.2f}"
+        cv2.putText(
+            frame,
+            cal_text,
+            (10, 120),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 255),
+            1,
+        )
+
     # Help text
-    help_text = "[q]uit [space]toggle [r]eset [+/-]threshold"
+    help_text = "[q]uit [space]toggle [c]alibrate [r]eset [+/-]threshold"
     cv2.putText(
         frame,
         help_text,
@@ -367,10 +382,10 @@ def main():
     # --- Main loop ---
     print()
     print("[INFO] Starting tracking loop...")
-    print("[INFO] Console commands: q=quit, r=reset, +/-=threshold")
+    print("[INFO] Console commands: q=quit, c=calibrate, r=reset, +/-=threshold")
     if not args.no_display:
         print("[INFO] Press 'q' to quit, 'space' to toggle tracking")
-        print("[INFO] Press '+/-' to adjust threshold, 'r' to reset")
+        print("[INFO] Press '+/-' to adjust threshold, 'c' to calibrate")
         # Create window before loop
         cv2.namedWindow("DVS Tracking", cv2.WINDOW_AUTOSIZE)
 
@@ -388,6 +403,7 @@ def main():
     last_target_z = 0.5
     last_target: Optional[DVSTarget] = None
     last_move_result = None
+    origin_y = 0.5  # Default: center is origin
 
     running = True
     frame_count = 0
@@ -412,8 +428,12 @@ def main():
                 # Get normalized center
                 norm_x, norm_y = target.normalized_center(w, h)
 
-                target_y = norm_x  # Camera horizontal -> Arm Y
-                target_z = norm_y  # Camera vertical -> Arm Z
+                # Apply origin_y calibration on vertical axis
+                calibrated_z = 0.5 + (norm_y - origin_y)
+                calibrated_z = max(0.0, min(1.0, calibrated_z))
+
+                target_y = norm_x       # Camera horizontal -> Arm Y
+                target_z = calibrated_z  # Camera vertical -> Arm Z
 
                 # Check if we should move
                 if should_move(
@@ -467,6 +487,7 @@ def main():
                     tracker.threshold,
                     last_target,
                     last_move_result,
+                    origin_y,
                 )
 
                 cv2.imshow("DVS Tracking", display_frame)
@@ -482,6 +503,19 @@ def main():
                     tracking_enabled = not tracking_enabled
                     status = "enabled" if tracking_enabled else "disabled"
                     print(f"[INFO] Tracking {status}")
+
+                elif key == ord("c"):
+                    # Calibrate origin using current target position
+                    if last_target:
+                        _, raw_y = last_target.normalized_center(w, h)
+                        origin_y = raw_y
+                        tracking_enabled = True
+                        print(
+                            f"[INFO] Origin calibrated: Y={origin_y:.2f}, "
+                            "tracking started"
+                        )
+                    else:
+                        print("[WARNING] No target detected for calibration")
 
                 elif key == ord("r"):
                     tracking_enabled = False
@@ -517,6 +551,18 @@ def main():
                 if cmd == "q":
                     print("[INFO] Quit requested (console)")
                     running = False
+
+                elif cmd == "c":
+                    if last_target:
+                        _, raw_y = last_target.normalized_center(w, h)
+                        origin_y = raw_y
+                        tracking_enabled = True
+                        print(
+                            f"[INFO] Origin calibrated: Y={origin_y:.2f}, "
+                            "tracking started"
+                        )
+                    else:
+                        print("[WARNING] No target detected for calibration")
 
                 elif cmd == "r":
                     tracking_enabled = False
