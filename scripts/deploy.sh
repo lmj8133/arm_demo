@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 TARGET="${1:-nvidia@orin.local}"
-REMOTE_PATH="${2:-~/arm_demo}"
+REMOTE_PATH="${2:-~/sandy/arm_demo}"
 
 echo "[INFO] Deploying from: $PROJECT_DIR"
 echo "[INFO] Target: $TARGET:$REMOTE_PATH"
