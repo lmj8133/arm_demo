@@ -38,15 +38,12 @@ import cv2
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from piper_demo import JointReader, MotionController, PiperConnection
+from piper_demo.profiler import PipelineProfiler
 from piper_demo.vision_arm_controller import VisionArmController
 
 from camera import CameraCapture, CameraCaptureError
 from color_tracker import ColorTarget, ColorTracker
 
-
-# Movement throttle settings
-MIN_MOVE_INTERVAL_SEC = 0.3  # Minimum time between arm movements
-MIN_POSITION_CHANGE = 0.03  # Minimum normalized position change to trigger move
 
 # Color key mappings
 COLOR_KEYS = {
@@ -199,29 +196,54 @@ def draw_status(
     )
 
 
-def should_move(
-    current_y: float,
-    current_z: float,
-    target_y: float,
-    target_z: float,
-    last_move_time: float,
-) -> bool:
-    """Check if arm should move based on throttle settings."""
-    # Check time interval
-    if time.time() - last_move_time < MIN_MOVE_INTERVAL_SEC:
-        return False
+def draw_profiler_osd(frame, profiler: PipelineProfiler) -> None:
+    """Draw profiler timing overlay on bottom-right of frame."""
+    if not profiler.enabled:
+        return
 
-    # Check position change
-    dy = abs(target_y - current_y)
-    dz = abs(target_z - current_z)
+    lines = profiler.format_osd()
+    if not lines:
+        return
 
-    return dy > MIN_POSITION_CHANGE or dz > MIN_POSITION_CHANGE
+    h, w = frame.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.5
+    thickness = 1
+    line_height = 20
+    padding = 10
+
+    # Calculate text box dimensions
+    max_width = 0
+    for line in lines:
+        (text_w, _), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        max_width = max(max_width, text_w)
+
+    box_w = max_width + padding * 2
+    box_h = len(lines) * line_height + padding * 2
+
+    # Draw semi-transparent background
+    x1 = w - box_w - 10
+    y1 = h - box_h - 10
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x1, y1), (w - 10, h - 10), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+
+    # Draw text lines
+    for i, line in enumerate(lines):
+        y = y1 + padding + (i + 1) * line_height - 5
+        cv2.putText(
+            frame,
+            line,
+            (x1 + padding, y),
+            font,
+            font_scale,
+            (0, 255, 255),  # Cyan color
+            thickness,
+        )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="HSV color tracking with arm control"
-    )
+    parser = argparse.ArgumentParser(description="HSV color tracking with arm control")
     parser.add_argument(
         "--can",
         default="can0",
@@ -273,7 +295,7 @@ def main():
         default=None,
         metavar="METERS",
         help="Override Z height for larger XY reach (e.g., 0.07 for 70mm). "
-             "Use scripts/find_optimal_z.py to find optimal value.",
+        "Use scripts/find_optimal_z.py to find optimal value.",
     )
     parser.add_argument(
         "--workspace-range",
@@ -281,6 +303,18 @@ def main():
         default=0.15,
         metavar="METERS",
         help="Half-range for XZ workspace (default: 0.15 = ±150mm)",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable pipeline profiler for timing measurements",
+    )
+    parser.add_argument(
+        "--profile-interval",
+        type=float,
+        default=5.0,
+        metavar="SECONDS",
+        help="Profiler report interval in seconds (default: 5.0)",
     )
     args = parser.parse_args()
 
@@ -292,6 +326,14 @@ def main():
 
     # Clamp speed
     speed = max(0.1, min(1.0, args.speed))
+
+    # Initialize profiler
+    profiler = PipelineProfiler(
+        enabled=args.profile,
+        report_interval_sec=args.profile_interval,
+    )
+    if profiler.enabled:
+        print(f"[INFO] Profiler enabled (report interval: {args.profile_interval}s)")
 
     print("=" * 60)
     print("HSV Color Tracking with Arm Control (ex14 color)")
@@ -342,9 +384,11 @@ def main():
         # Create vision controller
         print("[INFO] Computing workspace from HOME_POSITION...")
         controller, home_fk = VisionArmController.from_home_position(
-            PiperConnection.HOME_POSITION, reader, motion,
+            PiperConnection.HOME_POSITION,
+            reader,
+            motion,
             workspace_range_xz=args.workspace_range,
-            invert_cam_y=True,   # Flip: was False (default)
+            invert_cam_y=True,  # Flip: was False (default)
             invert_cam_z=True,  # Flip: was True (default)
             override_z=args.override_z,
         )
@@ -354,12 +398,14 @@ def main():
         x_mm, y_mm, z_mm = home_fk.position_mm()
         print(f"[INFO] HOME FK: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
         if args.override_z is not None:
-            print(f"[INFO] Override Z: {args.override_z*1000:.1f} mm (delta: {(args.override_z - home_fk.z)*1000:+.1f} mm)")
+            print(
+                f"[INFO] Override Z: {args.override_z * 1000:.1f} mm (delta: {(args.override_z - home_fk.z) * 1000:+.1f} mm)"
+            )
         print(
-            f"[INFO] Workspace X (front/back): {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm"
+            f"[INFO] Workspace X (front/back): {ws.x_arm.min * 1000:.0f} ~ {ws.x_arm.max * 1000:.0f} mm"
         )
         print(
-            f"[INFO] Workspace Y (left/right): {ws.y_arm.min*1000:.0f} ~ {ws.y_arm.max*1000:.0f} mm"
+            f"[INFO] Workspace Y (left/right): {ws.y_arm.min * 1000:.0f} ~ {ws.y_arm.max * 1000:.0f} mm"
         )
 
         print("[OK] Arm ready!")
@@ -377,7 +423,7 @@ def main():
         print("[INFO] Press 'q' to quit, 'space' to toggle tracking, 'c' to calibrate")
         print("[INFO] Press 'r' to reset, 1-4 to switch color (red/green/blue/yellow)")
         # Create window before loop
-        cv2.namedWindow("Color Tracking", cv2.WINDOW_AUTOSIZE)
+        cv2.namedWindow("Color Tracking", cv2.WINDOW_NORMAL)
 
     # Start console input thread (works in both display and headless mode)
     cmd_queue: queue.Queue = queue.Queue()
@@ -388,9 +434,6 @@ def main():
     input_thread.start()
 
     tracking_enabled = False
-    last_move_time = 0.0
-    last_target_y = 0.5
-    last_target_z = 0.5
     last_target: Optional[ColorTarget] = None
     last_move_result = None
     origin_y = 0.5  # Default: center is origin
@@ -400,8 +443,12 @@ def main():
 
     try:
         while running:
+            # Start total timing
+            profiler.start(PipelineProfiler.STAGE_TOTAL)
+
             # Capture frame
-            ret, frame = camera.read()
+            with profiler.stage(PipelineProfiler.STAGE_CAPTURE):
+                ret, frame = camera.read()
             if not ret:
                 print("[WARNING] Failed to capture frame")
                 continue
@@ -410,7 +457,8 @@ def main():
             h, w = frame.shape[:2]
 
             # Run detection
-            target = tracker.detect(frame)
+            with profiler.stage(PipelineProfiler.STAGE_HSV):
+                target = tracker.detect(frame)
             last_target = target
 
             # Process detection
@@ -426,37 +474,28 @@ def main():
                 calibrated_z = 0.5 + (norm_y - origin_y)
                 calibrated_z = max(0.0, min(1.0, calibrated_z))  # Clamp to [0, 1]
 
-                target_y = norm_x       # Camera horizontal -> Arm X (front-back)
-                target_z = calibrated_z # Camera vertical -> Arm Z (height)
+                target_y = norm_x  # Camera horizontal -> Arm X (front-back)
+                target_z = calibrated_z  # Camera vertical -> Arm Z (height)
 
-                # Check if we should move
-                if should_move(
-                    last_target_y,
-                    last_target_z,
-                    target_y,
-                    target_z,
-                    last_move_time,
-                ):
+                # Execute arm movement
+                with profiler.stage(PipelineProfiler.STAGE_IK):
                     result = controller.move_to_normalized(
                         target_y,
                         target_z,
                         speed_factor=speed,
                         wait=False,  # Non-blocking for smooth tracking
                     )
-                    last_move_result = result
-                    last_move_time = time.time()
-                    last_target_y = target_y
-                    last_target_z = target_z
+                last_move_result = result
 
-                    if result.ik_converged:
-                        status = "OK" if not result.near_singularity else "SING"
-                        if frame_count % 10 == 0:  # Reduce log spam
-                            print(
-                                f"[{status}] cam=({target_y:.2f}, {target_z:.2f}) "
-                                f"-> arm=({result.x_arm*1000:.0f}, {result.z_arm*1000:.0f})mm"
-                            )
-                    else:
-                        print(f"[IK FAIL] pos_err={result.position_error*1000:.1f}mm")
+                if result.ik_converged:
+                    status = "OK" if not result.near_singularity else "SING"
+                    if frame_count % 10 == 0:  # Reduce log spam
+                        print(
+                            f"[{status}] cam=({target_y:.2f}, {target_z:.2f}) "
+                            f"-> arm=({result.x_arm * 1000:.0f}, {result.z_arm * 1000:.0f})mm"
+                        )
+                else:
+                    print(f"[IK FAIL] pos_err={result.position_error * 1000:.1f}mm")
 
             # Display
             if not args.no_display:
@@ -479,6 +518,9 @@ def main():
                     origin_y,
                 )
 
+                # Draw profiler OSD (bottom-right)
+                draw_profiler_osd(frame, profiler)
+
                 cv2.imshow("Color Tracking", frame)
 
                 # Handle keyboard input
@@ -499,7 +541,9 @@ def main():
                         _, raw_y = last_target.normalized_center(w, h)
                         origin_y = raw_y
                         tracking_enabled = True  # Auto-start tracking after calibration
-                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started")
+                        print(
+                            f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started"
+                        )
                     else:
                         print("[WARNING] No target detected for calibration")
 
@@ -513,8 +557,6 @@ def main():
                         wait=True,
                     )
                     last_move_result = result
-                    last_target_y = 0.5
-                    last_target_z = 0.5
 
                 elif key == ord("s"):
                     tracking_enabled = False
@@ -542,7 +584,9 @@ def main():
                         _, raw_y = last_target.normalized_center(w, h)
                         origin_y = raw_y
                         tracking_enabled = True  # Auto-start tracking after calibration
-                        print(f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started")
+                        print(
+                            f"[INFO] Origin calibrated: Y={origin_y:.2f}, tracking started"
+                        )
                     else:
                         print("[WARNING] No target detected for calibration")
 
@@ -556,8 +600,6 @@ def main():
                         wait=True,
                     )
                     last_move_result = result
-                    last_target_y = 0.5
-                    last_target_z = 0.5
 
                 elif cmd == "s":
                     tracking_enabled = False
@@ -568,6 +610,10 @@ def main():
                     tracker.set_color(new_color)
                     print(f"[INFO] Switched to color: {new_color}")
 
+            # Stop total timing and maybe print report
+            profiler.stop(PipelineProfiler.STAGE_TOTAL)
+            profiler.maybe_print_report()
+
             if args.no_display:
                 # Headless mode: small delay to prevent CPU spinning
                 time.sleep(0.01)
@@ -577,6 +623,14 @@ def main():
         print("[INFO] Interrupted by user")
 
     # --- Cleanup ---
+    # Print final profiler summary
+    if profiler.enabled:
+        print()
+        print("=" * 60)
+        print("FINAL PROFILER SUMMARY")
+        print("=" * 60)
+        print(profiler.format_report())
+
     print("[INFO] Cleaning up...")
     stop_event.set()  # Signal input thread to stop
 

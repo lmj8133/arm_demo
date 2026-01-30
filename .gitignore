@@ -24,3 +24,16 @@ piper_sdk/
 *.pt
 *.pth
 *.onnx
+
+# Documentation
+docs/
+
+# Experimental scripts
+code/
+
+# MediaPipe models and demo
+examples/ex14/mediapipe/
+
+# Python version and uv lock
+.python-version
+uv.lock
