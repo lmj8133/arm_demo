@@ -24,7 +24,6 @@ WARNING: This will physically move the robot arm!
 import sys
 import os
 import argparse
-import readline  # Enable command history (up/down arrow keys)
 import time
 from dataclasses import dataclass
 from typing import Tuple
@@ -41,6 +40,7 @@ from utils import deg_to_rad
 @dataclass
 class ReferencePoint:
     """Reference point for relative positioning."""
+
     x: float  # meters
     y: float  # meters
     z: float  # meters
@@ -89,7 +89,9 @@ def print_prompt(ref: ReferencePoint, current_pose: FKResult, speed: float):
     print("Commands: x y z | home | setref | status | speed <val> | disable | help")
 
 
-def print_status(ref: ReferencePoint, current_pose: FKResult, joint_state, speed: float):
+def print_status(
+    ref: ReferencePoint, current_pose: FKResult, joint_state, speed: float
+):
     """Print detailed status information."""
     print()
     ref_label = "home" if ref.is_home else "custom"
@@ -106,7 +108,7 @@ def print_status(ref: ReferencePoint, current_pose: FKResult, joint_state, speed
     print(f"Offset:    ({off_x:.2f}, {off_y:.2f}, {off_z:.2f}) mm")
     print(f"Speed: {speed}")
     print()
-    print(f"Orientation:")
+    print("Orientation:")
     r, p, y = current_pose.orientation_deg()
     print(f"  Roll={r:.2f}°, Pitch={p:.2f}°, Yaw={y:.2f}°")
 
@@ -125,32 +127,32 @@ def parse_command(line: str) -> Tuple[str, list]:
     """
     line = line.strip()
     if not line:
-        return ('empty', [])
+        return ("empty", [])
 
     parts = line.split()
     cmd = parts[0].lower()
 
     # Named commands
-    if cmd == 'home':
-        return ('home', [])
-    elif cmd == 'setref':
-        return ('setref', [])
-    elif cmd == 'status':
-        return ('status', [])
-    elif cmd == 'speed':
+    if cmd == "home":
+        return ("home", [])
+    elif cmd == "setref":
+        return ("setref", [])
+    elif cmd == "status":
+        return ("status", [])
+    elif cmd == "speed":
         if len(parts) < 2:
-            return ('error', ['Speed command requires a value (0.1-1.0)'])
+            return ("error", ["Speed command requires a value (0.1-1.0)"])
         try:
             val = float(parts[1])
             if val < 0.1 or val > 1.0:
-                return ('error', ['Speed must be between 0.1 and 1.0'])
-            return ('speed', [val])
+                return ("error", ["Speed must be between 0.1 and 1.0"])
+            return ("speed", [val])
         except ValueError:
-            return ('error', [f'Invalid speed value: {parts[1]}'])
-    elif cmd == 'disable':
-        return ('disable', [])
-    elif cmd == 'help':
-        return ('help', [])
+            return ("error", [f"Invalid speed value: {parts[1]}"])
+    elif cmd == "disable":
+        return ("disable", [])
+    elif cmd == "help":
+        return ("help", [])
 
     # Try to parse as xyz coordinates
     if len(parts) == 3:
@@ -158,15 +160,17 @@ def parse_command(line: str) -> Tuple[str, list]:
             x = float(parts[0])
             y = float(parts[1])
             z = float(parts[2])
-            return ('move', [x, y, z])
+            return ("move", [x, y, z])
         except ValueError:
-            return ('error', [f'Invalid coordinates: {line}'])
+            return ("error", [f"Invalid coordinates: {line}"])
 
-    return ('error', [f'Unknown command: {line}'])
+    return ("error", [f"Unknown command: {line}"])
 
 
 def execute_move(
-    x_mm: float, y_mm: float, z_mm: float,
+    x_mm: float,
+    y_mm: float,
+    z_mm: float,
     ref: ReferencePoint,
     speed: float,
     reader,
@@ -192,7 +196,7 @@ def execute_move(
     target_z = ref.z + z_mm / 1000.0
 
     print(f"[INFO] Target: reference + ({x_mm:.0f}, {y_mm:.0f}, {z_mm:.0f}) mm")
-    print(f"[INFO] Computing IK...")
+    print("[INFO] Computing IK...")
 
     # Use reference orientation
     target_roll = ref.roll
@@ -208,8 +212,12 @@ def execute_move(
     )
 
     result = inverse_kinematics(
-        target_x, target_y, target_z,
-        target_roll, target_pitch, target_yaw,
+        target_x,
+        target_y,
+        target_z,
+        target_roll,
+        target_pitch,
+        target_yaw,
         initial_guess=home_joints,
         config=config,
     )
@@ -221,7 +229,9 @@ def execute_move(
 
     # Check position error
     if result.position_error > 0.001:  # > 1mm
-        print(f"[ERROR] Position error {result.position_error*1000:.2f}mm exceeds 1mm threshold")
+        print(
+            f"[ERROR] Position error {result.position_error * 1000:.2f}mm exceeds 1mm threshold"
+        )
         return False
 
     # Move arm
@@ -248,12 +258,13 @@ def main():
         description="Interactive demo for Piper arm with reference-point-based control"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Initial speed factor 0.1-1.0 (default: 0.3)"
+        "--speed",
+        type=float,
+        default=0.3,
+        help="Initial speed factor 0.1-1.0 (default: 0.3)",
     )
     args = parser.parse_args()
 
@@ -317,25 +328,25 @@ def main():
                 # Parse and execute command
                 cmd, cmd_args = parse_command(line)
 
-                if cmd == 'empty':
+                if cmd == "empty":
                     continue
 
-                elif cmd == 'error':
+                elif cmd == "error":
                     print(f"[ERROR] {cmd_args[0]}")
 
-                elif cmd == 'help':
+                elif cmd == "help":
                     print_help()
 
-                elif cmd == 'status':
+                elif cmd == "status":
                     current_pose = reader.read_end_pose()
                     joint_state = reader.read_joints()
                     print_status(ref, current_pose, joint_state, speed)
 
-                elif cmd == 'speed':
+                elif cmd == "speed":
                     speed = cmd_args[0]
                     print(f"[OK] Speed set to {speed}")
 
-                elif cmd == 'setref':
+                elif cmd == "setref":
                     current_pose = reader.read_end_pose()
                     ref = ReferencePoint(
                         x=current_pose.x,
@@ -350,7 +361,7 @@ def main():
                     rx, ry, rz = ref.position_mm()
                     print(f"Reference: custom (X={rx:.2f}, Y={ry:.2f}, Z={rz:.2f} mm)")
 
-                elif cmd == 'home':
+                elif cmd == "home":
                     print("[INFO] Returning to home position...")
                     motion.move_to_home(speed_factor=0.2)
 
@@ -376,15 +387,20 @@ def main():
                     else:
                         print("[WARNING] Motion timeout")
 
-                elif cmd == 'move':
+                elif cmd == "move":
                     x_mm, y_mm, z_mm = cmd_args
                     execute_move(
-                        x_mm, y_mm, z_mm,
-                        ref, speed,
-                        reader, motion, home_joints,
+                        x_mm,
+                        y_mm,
+                        z_mm,
+                        ref,
+                        speed,
+                        reader,
+                        motion,
+                        home_joints,
                     )
 
-                elif cmd == 'disable':
+                elif cmd == "disable":
                     print("[INFO] Returning to safe home...")
                     print("[INFO] Disabling arm...")
                     conn.safe_disable(return_home=True, home_speed=20)

@@ -66,7 +66,9 @@ def main():
 
     # Step 3: Switch to CAN control mode + MOVE J
     print("\n[Step 2] Switching to CAN control mode (MOVE J)...")
-    piper.MotionCtrl_2(0x01, 0x01, 30, 0x00)  # ctrl_mode=CAN, move_mode=MOVEJ, speed=30%
+    piper.MotionCtrl_2(
+        0x01, 0x01, 30, 0x00
+    )  # ctrl_mode=CAN, move_mode=MOVEJ, speed=30%
     time.sleep(0.2)
 
     # Step 4: Verify status
@@ -89,7 +91,7 @@ def main():
     print("=" * 50)
 
     response = input("\nProceed with movement test? [y/N]: ").strip().lower()
-    if response != 'y':
+    if response != "y":
         print("Test cancelled by user.")
         return 0
 
@@ -99,13 +101,13 @@ def main():
 
     # Move joint 1 by ~5 degrees (0.087 rad)
     test_positions = [
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],      # Position 1: zero
-        [0.75, 0.0, 0.0, 0.0, 0.0, 0.0],    # Position 2: J1 +5 deg
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],      # Position 3: back to zero
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Position 1: zero
+        [0.75, 0.0, 0.0, 0.0, 0.0, 0.0],  # Position 2: J1 +5 deg
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Position 3: back to zero
     ]
 
     for i, pos in enumerate(test_positions):
-        print(f"\n[Step 3.{i+1}] Moving to position {i+1}...")
+        print(f"\n[Step 3.{i + 1}] Moving to position {i + 1}...")
         print(f"  Target (rad): {pos}")
 
         # Convert to 0.001 degree units
@@ -114,13 +116,14 @@ def main():
         # Send control commands (need to send repeatedly for a short duration)
         for _ in range(100):  # Send for ~0.5 seconds
             piper.MotionCtrl_2(0x01, 0x01, 30, 0x00)
-            piper.JointCtrl(joints[0], joints[1], joints[2],
-                           joints[3], joints[4], joints[5])
+            piper.JointCtrl(
+                joints[0], joints[1], joints[2], joints[3], joints[4], joints[5]
+            )
             time.sleep(0.005)
 
         # Wait for movement to complete
         time.sleep(1.0)
-        print_status(piper, f"Status after position {i+1}")
+        print_status(piper, f"Status after position {i + 1}")
 
     # Step 8: Final status
     print_joints(piper, "Final Joint Positions")

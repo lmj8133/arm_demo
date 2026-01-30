@@ -34,15 +34,15 @@ def main():
     print(f"[OK] CAN interface '{can_name}' is active")
 
     # Connect to arm
-    print(f"\n[2/3] Connecting to Piper arm...")
+    print("\n[2/3] Connecting to Piper arm...")
     try:
         with PiperConnection(can_name=can_name) as conn:
             print(f"[OK] Connected: {conn}")
 
             # Read basic status
-            print(f"\n[3/3] Reading arm status...")
+            print("\n[3/3] Reading arm status...")
             joint_msg = conn.piper.GetArmJointMsgs()
-            print(f"[OK] Joint message received")
+            print("[OK] Joint message received")
             print(f"     Joint 1: {joint_msg.joint_state.joint_1:.4f} rad")
             print(f"     Joint 2: {joint_msg.joint_state.joint_2:.4f} rad")
             print(f"     Joint 3: {joint_msg.joint_state.joint_3:.4f} rad")

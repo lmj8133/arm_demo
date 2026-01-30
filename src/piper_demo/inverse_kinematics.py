@@ -55,7 +55,7 @@ class IKResult:
         status = "converged" if self.converged else "not converged"
         return (
             f"IKResult({status}, iter={self.iterations}, "
-            f"pos_err={self.position_error*1000:.3f}mm, "
+            f"pos_err={self.position_error * 1000:.3f}mm, "
             f"ori_err={math.degrees(self.orientation_error):.3f}°)"
         )
 
@@ -101,7 +101,9 @@ def _euler_zyx_to_rotation_matrix(
     ]
 
 
-def _rotation_error(R_current: Matrix4, R_target: List[List[float]]) -> Tuple[float, float, float]:
+def _rotation_error(
+    R_current: Matrix4, R_target: List[List[float]]
+) -> Tuple[float, float, float]:
     """Compute orientation error using axis-angle representation.
 
     Computes R_error = R_target * R_current^T, then extracts axis-angle.

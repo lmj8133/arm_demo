@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from piper_demo import PiperConnection, JointReader, MotionController
-from piper_demo.utils import deg_to_rad, rad_to_deg
+from piper_demo.utils import deg_to_rad
 
 
 def main():
@@ -36,23 +36,27 @@ def main():
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--joint", type=int, required=True, choices=range(1, 7),
-        help="Joint number (1-6)"
+        "--joint",
+        type=int,
+        required=True,
+        choices=range(1, 7),
+        help="Joint number (1-6)",
     )
     parser.add_argument(
         "--angle", type=float, required=True, help="Target angle in degrees"
     )
     parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Speed factor 0.0-1.0 (default: 0.3)"
+        "--speed", type=float, default=0.3, help="Speed factor 0.0-1.0 (default: 0.3)"
     )
     args = parser.parse_args()
 
     joint_idx = args.joint - 1  # Convert to 0-indexed
     target_rad = deg_to_rad(args.angle)
 
-    print(f"[INFO] Target: Joint {args.joint} -> {args.angle:.1f}° at speed {args.speed}")
-    print(f"[WARN] The arm will move! Ensure workspace is clear.")
+    print(
+        f"[INFO] Target: Joint {args.joint} -> {args.angle:.1f}° at speed {args.speed}"
+    )
+    print("[WARN] The arm will move! Ensure workspace is clear.")
     print()
 
     try:

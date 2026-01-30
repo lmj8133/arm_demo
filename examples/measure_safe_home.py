@@ -28,7 +28,7 @@ def main():
 
         # Read current pose
         pose = reader.read_end_pose()
-        print(f"\nCurrent Cartesian pose:")
+        print("\nCurrent Cartesian pose:")
         print(f"  X = {pose.x * 1000:.2f} mm")
         print(f"  Y = {pose.y * 1000:.2f} mm")
         print(f"  Z = {pose.z * 1000:.2f} mm")
@@ -41,10 +41,10 @@ def main():
 
         # Read joint angles
         state = reader.read_joints()
-        print(f"\nJoint angles (radians):")
+        print("\nJoint angles (radians):")
         for i, p in enumerate(state.positions):
             deg = p * 180 / 3.14159
-            print(f"  Joint {i+1}: {p:.5f} rad ({deg:.2f}°)")
+            print(f"  Joint {i + 1}: {p:.5f} rad ({deg:.2f}°)")
 
         # Output ready-to-copy format
         rounded = [round(p, 5) for p in state.positions]
@@ -76,7 +76,9 @@ def main():
         print("\nCopy-paste ready (mm):")
         print(f"XYZ_OFFSET = ({offset_x:.2f}, {offset_y:.2f}, {offset_z:.2f})")
 
-        print(f"\nReference HOME XYZ (from FK): ({home_xyz[0]:.2f}, {home_xyz[1]:.2f}, {home_xyz[2]:.2f}) mm")
+        print(
+            f"\nReference HOME XYZ (from FK): ({home_xyz[0]:.2f}, {home_xyz[1]:.2f}, {home_xyz[2]:.2f}) mm"
+        )
         print("=" * 60)
 
     return 0

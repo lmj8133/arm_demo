@@ -20,6 +20,7 @@ from .utils import (
 
 class MotionError(Exception):
     """Exception raised for motion-related errors."""
+
     pass
 
 
@@ -79,8 +80,7 @@ class MotionController:
         # Validate or clamp positions
         if self.enforce_limits:
             positions = [
-                clamp_joint_position(i, pos)
-                for i, pos in enumerate(positions)
+                clamp_joint_position(i, pos) for i, pos in enumerate(positions)
             ]
         else:
             is_valid, error_msg = validate_joint_positions(positions)
@@ -100,8 +100,12 @@ class MotionController:
         # coord_type: 0x00 = Cartesian, 0x01 = Joint
         self.piper.MotionCtrl_2(0x01, 0x01, speed_value, 0x00)
         self.piper.JointCtrl(
-            joints[0], joints[1], joints[2],
-            joints[3], joints[4], joints[5],
+            joints[0],
+            joints[1],
+            joints[2],
+            joints[3],
+            joints[4],
+            joints[5],
         )
 
     def move_joint_deg(
@@ -193,8 +197,12 @@ class MotionController:
         # coord_type: 0x00 = Cartesian, 0x01 = Joint
         self.piper.MotionCtrl_2(0x01, 0x00, speed_value, 0x00)
         self.piper.EndPoseCtrl(
-            x_001mm, y_001mm, z_001mm,
-            roll_001deg, pitch_001deg, yaw_001deg,
+            x_001mm,
+            y_001mm,
+            z_001mm,
+            roll_001deg,
+            pitch_001deg,
+            yaw_001deg,
         )
 
     def move_cartesian_continuous(
@@ -270,8 +278,12 @@ class MotionController:
                 # Use Cartesian P2P (0x00) - same as move_cartesian()
                 self.piper.MotionCtrl_2(0x01, 0x00, speed_value, 0x00)
                 self.piper.EndPoseCtrl(
-                    x_001mm, y_001mm, z_001mm,
-                    roll_001deg, pitch_001deg, yaw_001deg,
+                    x_001mm,
+                    y_001mm,
+                    z_001mm,
+                    roll_001deg,
+                    pitch_001deg,
+                    yaw_001deg,
                 )
 
                 # Read current pose
@@ -282,16 +294,14 @@ class MotionController:
 
                 # Check position error
                 pos_error = math.sqrt(
-                    (pose.x - x) ** 2 +
-                    (pose.y - y) ** 2 +
-                    (pose.z - z) ** 2
+                    (pose.x - x) ** 2 + (pose.y - y) ** 2 + (pose.z - z) ** 2
                 )
 
                 # Check orientation error
                 orient_ok = (
-                    abs(pose.roll - roll) <= tolerance_rad and
-                    abs(pose.pitch - pitch) <= tolerance_rad and
-                    abs(pose.yaw - yaw) <= tolerance_rad
+                    abs(pose.roll - roll) <= tolerance_rad
+                    and abs(pose.pitch - pitch) <= tolerance_rad
+                    and abs(pose.yaw - yaw) <= tolerance_rad
                 )
 
                 if pos_error <= tolerance_m and orient_ok:
@@ -356,8 +366,12 @@ class MotionController:
         # coord_type: 0x00 = Cartesian P2P, 0x01 = Joint, 0x02 = MoveL
         self.piper.MotionCtrl_2(0x01, 0x02, speed_value, 0x00)
         self.piper.EndPoseCtrl(
-            x_001mm, y_001mm, z_001mm,
-            roll_001deg, pitch_001deg, yaw_001deg,
+            x_001mm,
+            y_001mm,
+            z_001mm,
+            roll_001deg,
+            pitch_001deg,
+            yaw_001deg,
         )
 
     def move_linear_continuous(
@@ -428,8 +442,12 @@ class MotionController:
                 # Send MoveL command continuously (coord_type=0x02)
                 self.piper.MotionCtrl_2(0x01, 0x02, speed_value, 0x00)
                 self.piper.EndPoseCtrl(
-                    x_001mm, y_001mm, z_001mm,
-                    roll_001deg, pitch_001deg, yaw_001deg,
+                    x_001mm,
+                    y_001mm,
+                    z_001mm,
+                    roll_001deg,
+                    pitch_001deg,
+                    yaw_001deg,
                 )
 
                 # Read current pose
@@ -440,16 +458,14 @@ class MotionController:
 
                 # Check position error
                 pos_error = math.sqrt(
-                    (pose.x - x) ** 2 +
-                    (pose.y - y) ** 2 +
-                    (pose.z - z) ** 2
+                    (pose.x - x) ** 2 + (pose.y - y) ** 2 + (pose.z - z) ** 2
                 )
 
                 # Check orientation error
                 orient_ok = (
-                    abs(pose.roll - roll) <= tolerance_rad and
-                    abs(pose.pitch - pitch) <= tolerance_rad and
-                    abs(pose.yaw - yaw) <= tolerance_rad
+                    abs(pose.roll - roll) <= tolerance_rad
+                    and abs(pose.pitch - pitch) <= tolerance_rad
+                    and abs(pose.yaw - yaw) <= tolerance_rad
                 )
 
                 if pos_error <= tolerance_m and orient_ok:
@@ -507,6 +523,5 @@ class MotionController:
             List of (min, max) tuples for each joint in degrees
         """
         return [
-            (rad_to_deg(min_v), rad_to_deg(max_v))
-            for min_v, max_v in JOINT_LIMITS_RAD
+            (rad_to_deg(min_v), rad_to_deg(max_v)) for min_v, max_v in JOINT_LIMITS_RAD
         ]

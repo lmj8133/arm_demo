@@ -43,9 +43,13 @@ def main():
     TARGET_Y = -50000
     TARGET_Z = 150000
 
-    print(f"\nTarget Cartesian pose:")
-    print(f"  Position: ({TARGET_X/1000:.0f}, {TARGET_Y/1000:.0f}, {TARGET_Z/1000:.0f}) mm")
-    print(f"  Orientation: (roll={OFFICIAL_RX/1000:.1f}°, pitch={OFFICIAL_RY/1000:.1f}°, yaw={OFFICIAL_RZ/1000:.1f}°)")
+    print("\nTarget Cartesian pose:")
+    print(
+        f"  Position: ({TARGET_X / 1000:.0f}, {TARGET_Y / 1000:.0f}, {TARGET_Z / 1000:.0f}) mm"
+    )
+    print(
+        f"  Orientation: (roll={OFFICIAL_RX / 1000:.1f}°, pitch={OFFICIAL_RY / 1000:.1f}°, yaw={OFFICIAL_RZ / 1000:.1f}°)"
+    )
 
     with PiperConnection(can_name="can0") as conn:
         piper = conn.piper
@@ -59,7 +63,7 @@ def main():
         # Read current pose
         time.sleep(0.3)
         pose = reader.read_end_pose()
-        print(f"\n[2] Current pose:")
+        print("\n[2] Current pose:")
         print(f"    X = {pose.x * 1000:.1f} mm")
         print(f"    Y = {pose.y * 1000:.1f} mm")
         print(f"    Z = {pose.z * 1000:.1f} mm")
@@ -71,12 +75,14 @@ def main():
         print(f"    Yaw   = {yaw_deg:.1f}°")
 
         # Move to official safe pose using MOVEP
-        print(f"\n[3] Moving to official safe pose with MOVEP...")
+        print("\n[3] Moving to official safe pose with MOVEP...")
         duration_sec = 4.0
         start_time = time.time()
         while time.time() - start_time < duration_sec:
             piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)  # MOVEP mode
-            piper.EndPoseCtrl(TARGET_X, TARGET_Y, TARGET_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ)
+            piper.EndPoseCtrl(
+                TARGET_X, TARGET_Y, TARGET_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ
+            )
             time.sleep(0.02)
 
         # Wait for settle
@@ -85,7 +91,7 @@ def main():
 
         # Read final Cartesian pose
         pose = reader.read_end_pose()
-        print(f"\n[4] Final Cartesian pose:")
+        print("\n[4] Final Cartesian pose:")
         print(f"    X = {pose.x * 1000:.1f} mm")
         print(f"    Y = {pose.y * 1000:.1f} mm")
         print(f"    Z = {pose.z * 1000:.1f} mm")
@@ -98,10 +104,10 @@ def main():
 
         # Read joint angles
         state = reader.read_joints()
-        print(f"\n[5] Joint angles (radians):")
+        print("\n[5] Joint angles (radians):")
         for i, p in enumerate(state.positions):
             deg = p * 180 / 3.14159
-            print(f"    Joint {i+1}: {p:.5f} rad ({deg:.2f}°)")
+            print(f"    Joint {i + 1}: {p:.5f} rad ({deg:.2f}°)")
 
         # Output ready-to-copy format
         rounded = [round(p, 5) for p in state.positions]

@@ -24,24 +24,26 @@ from detector import PlateDetector, PlateDetectorError
 def main():
     parser = argparse.ArgumentParser(description="Test plate detection")
     parser.add_argument(
-        "--camera", default="0",
-        help="Camera device index or path (default: 0)"
+        "--camera", default="0", help="Camera device index or path (default: 0)"
     )
     parser.add_argument(
-        "--model", default="plate_recog_best.pt",
-        help="Path to YOLOv8 model file (default: plate_recog_best.pt)"
+        "--model",
+        default="plate_recog_best.pt",
+        help="Path to YOLOv8 model file (default: plate_recog_best.pt)",
     )
     parser.add_argument(
-        "--conf", type=float, default=0.5,
-        help="Detection confidence threshold (default: 0.5)"
+        "--conf",
+        type=float,
+        default=0.5,
+        help="Detection confidence threshold (default: 0.5)",
     )
     parser.add_argument(
-        "--save-dir", default=None,
-        help="Directory to save detection images (optional)"
+        "--save-dir", default=None, help="Directory to save detection images (optional)"
     )
     parser.add_argument(
-        "--no-display", action="store_true",
-        help="Disable GUI display, save images instead"
+        "--no-display",
+        action="store_true",
+        help="Disable GUI display, save images instead",
     )
     args = parser.parse_args()
 
@@ -74,7 +76,7 @@ def main():
     print(f"[INFO] Loading model: {args.model}")
     try:
         detector = PlateDetector(args.model, conf_threshold=args.conf)
-        print(f"[OK] Model loaded")
+        print("[OK] Model loaded")
     except PlateDetectorError as e:
         print(f"[ERROR] {e}")
         camera.release()
@@ -116,8 +118,13 @@ def main():
                 # Draw label
                 label = f"{det.class_name} {det.confidence:.2f}"
                 cv2.putText(
-                    display_frame, label, (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
+                    display_frame,
+                    label,
+                    (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2,
                 )
 
                 # Draw center
@@ -135,8 +142,13 @@ def main():
             # Show detection count
             count_text = f"Detections: {len(detections)}"
             cv2.putText(
-                display_frame, count_text, (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2
+                display_frame,
+                count_text,
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (255, 255, 255),
+                2,
             )
 
             # Display or save
@@ -144,10 +156,10 @@ def main():
                 cv2.imshow("Detection Test", display_frame)
                 key = cv2.waitKey(1) & 0xFF
 
-                if key == ord('q'):
+                if key == ord("q"):
                     print("[INFO] Quit")
                     break
-                elif key == ord('s'):
+                elif key == ord("s"):
                     # Save current frame
                     save_path = f"detection_{save_count:04d}.jpg"
                     if args.save_dir:

@@ -35,19 +35,27 @@ from inverse_kinematics import inverse_kinematics, IKConfig
 from utils import deg_to_rad, rad_to_deg
 
 
-def print_pose(label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float):
+def print_pose(
+    label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
+):
     """Print pose in a formatted way."""
     print(f"{label}:")
-    print(f"  Position:    X={x*1000:8.2f} mm, Y={y*1000:8.2f} mm, Z={z*1000:8.2f} mm")
-    print(f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°")
+    print(
+        f"  Position:    X={x * 1000:8.2f} mm, Y={y * 1000:8.2f} mm, Z={z * 1000:8.2f} mm"
+    )
+    print(
+        f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°"
+    )
 
 
 def print_joints(label: str, angles_rad: list):
     """Print joint angles."""
     print(f"{label}:")
     angles_deg = [rad_to_deg(a) for a in angles_rad]
-    print(f"  [{angles_deg[0]:7.2f}°, {angles_deg[1]:7.2f}°, {angles_deg[2]:7.2f}°, "
-          f"{angles_deg[3]:7.2f}°, {angles_deg[4]:7.2f}°, {angles_deg[5]:7.2f}°]")
+    print(
+        f"  [{angles_deg[0]:7.2f}°, {angles_deg[1]:7.2f}°, {angles_deg[2]:7.2f}°, "
+        f"{angles_deg[3]:7.2f}°, {angles_deg[4]:7.2f}°, {angles_deg[5]:7.2f}°]"
+    )
 
 
 def main():
@@ -55,29 +63,27 @@ def main():
         description="Move Piper arm to target pose using inverse kinematics"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--target", nargs=6, type=float, required=True,
+        "--target",
+        nargs=6,
+        type=float,
+        required=True,
         metavar=("X", "Y", "Z", "ROLL", "PITCH", "YAW"),
-        help="Target pose: x,y,z in mm; roll,pitch,yaw in degrees"
+        help="Target pose: x,y,z in mm; roll,pitch,yaw in degrees",
     )
     parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Speed factor 0.0-1.0 (default: 0.3)"
+        "--speed", type=float, default=0.3, help="Speed factor 0.0-1.0 (default: 0.3)"
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Compute IK only, don't move the arm"
+        "--dry-run", action="store_true", help="Compute IK only, don't move the arm"
     )
     parser.add_argument(
-        "--max-iter", type=int, default=100,
-        help="Maximum IK iterations (default: 100)"
+        "--max-iter", type=int, default=100, help="Maximum IK iterations (default: 100)"
     )
     parser.add_argument(
-        "--damping", type=float, default=0.05,
-        help="IK damping factor (default: 0.05)"
+        "--damping", type=float, default=0.05, help="IK damping factor (default: 0.05)"
     )
     args = parser.parse_args()
 
@@ -94,7 +100,15 @@ def main():
     target_yaw = deg_to_rad(args.target[5])
 
     print()
-    print_pose("Target Pose", target_x, target_y, target_z, target_roll, target_pitch, target_yaw)
+    print_pose(
+        "Target Pose",
+        target_x,
+        target_y,
+        target_z,
+        target_roll,
+        target_pitch,
+        target_yaw,
+    )
 
     # Connect to arm and read current state
     print()
@@ -119,8 +133,15 @@ def main():
             current_pose = reader.read_end_pose()
 
             print()
-            print_pose("Current Pose", current_pose.x, current_pose.y, current_pose.z,
-                      current_pose.roll, current_pose.pitch, current_pose.yaw)
+            print_pose(
+                "Current Pose",
+                current_pose.x,
+                current_pose.y,
+                current_pose.z,
+                current_pose.roll,
+                current_pose.pitch,
+                current_pose.yaw,
+            )
             print()
             print_joints("Current Joints", current_joints)
 
@@ -137,18 +158,24 @@ def main():
             )
 
             result = inverse_kinematics(
-                target_x, target_y, target_z,
-                target_roll, target_pitch, target_yaw,
+                target_x,
+                target_y,
+                target_z,
+                target_roll,
+                target_pitch,
+                target_yaw,
                 initial_guess=current_joints,
-                config=config
+                config=config,
             )
 
             if result.converged:
                 print(f"[OK] IK converged in {result.iterations} iterations")
             else:
-                print(f"[WARNING] IK did not converge after {result.iterations} iterations")
+                print(
+                    f"[WARNING] IK did not converge after {result.iterations} iterations"
+                )
 
-            print(f"  Position error:    {result.position_error*1000:.4f} mm")
+            print(f"  Position error:    {result.position_error * 1000:.4f} mm")
             print(f"  Orientation error: {rad_to_deg(result.orientation_error):.4f}°")
             print()
             print_joints("IK Solution", result.joint_angles)
@@ -156,15 +183,19 @@ def main():
             # Verify with FK
             fk = forward_kinematics(result.joint_angles)
             print()
-            print_pose("Expected Pose (FK)", fk.x, fk.y, fk.z, fk.roll, fk.pitch, fk.yaw)
+            print_pose(
+                "Expected Pose (FK)", fk.x, fk.y, fk.z, fk.roll, fk.pitch, fk.yaw
+            )
 
             # Check if IK solution is acceptable
             if result.position_error > 0.001:  # > 1mm
                 print()
-                print(f"[WARNING] Position error {result.position_error*1000:.2f}mm exceeds 1mm threshold")
+                print(
+                    f"[WARNING] Position error {result.position_error * 1000:.2f}mm exceeds 1mm threshold"
+                )
                 if not args.dry_run:
                     response = input("Continue anyway? [y/N]: ")
-                    if response.lower() != 'y':
+                    if response.lower() != "y":
                         print("Aborted.")
                         return 1
 
@@ -210,19 +241,26 @@ def main():
                 final_joints = reader.read_joints()
 
                 print()
-                print_pose("Final Pose", final_pose.x, final_pose.y, final_pose.z,
-                          final_pose.roll, final_pose.pitch, final_pose.yaw)
+                print_pose(
+                    "Final Pose",
+                    final_pose.x,
+                    final_pose.y,
+                    final_pose.z,
+                    final_pose.roll,
+                    final_pose.pitch,
+                    final_pose.yaw,
+                )
                 print()
                 print_joints("Final Joints", final_joints.positions)
 
                 # Calculate final error
                 final_pos_err = math.sqrt(
-                    (final_pose.x - target_x)**2 +
-                    (final_pose.y - target_y)**2 +
-                    (final_pose.z - target_z)**2
+                    (final_pose.x - target_x) ** 2
+                    + (final_pose.y - target_y) ** 2
+                    + (final_pose.z - target_z) ** 2
                 )
                 print()
-                print(f"Final position error: {final_pos_err*1000:.2f} mm")
+                print(f"Final position error: {final_pos_err * 1000:.2f} mm")
 
                 # Hold position briefly then safe disable
                 print()

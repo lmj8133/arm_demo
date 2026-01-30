@@ -27,11 +27,17 @@ from kinematics import forward_kinematics
 from utils import deg_to_rad, rad_to_deg
 
 
-def print_pose(label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float):
+def print_pose(
+    label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
+):
     """Print pose in a formatted way."""
     print(f"\n{label}:")
-    print(f"  Position:    X={x*1000:8.2f} mm, Y={y*1000:8.2f} mm, Z={z*1000:8.2f} mm")
-    print(f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°")
+    print(
+        f"  Position:    X={x * 1000:8.2f} mm, Y={y * 1000:8.2f} mm, Z={z * 1000:8.2f} mm"
+    )
+    print(
+        f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°"
+    )
 
 
 def main():
@@ -39,17 +45,20 @@ def main():
         description="Forward kinematics test for Piper arm"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--simulate", action="store_true",
-        help="Run without hardware (use default or specified joint angles)"
+        "--simulate",
+        action="store_true",
+        help="Run without hardware (use default or specified joint angles)",
     )
     parser.add_argument(
-        "--joints", nargs=6, type=float, default=None,
+        "--joints",
+        nargs=6,
+        type=float,
+        default=None,
         metavar=("J1", "J2", "J3", "J4", "J5", "J6"),
-        help="Joint angles in degrees (default: all zeros)"
+        help="Joint angles in degrees (default: all zeros)",
     )
     args = parser.parse_args()
 
@@ -61,11 +70,11 @@ def main():
     if args.joints:
         joint_angles_deg = args.joints
         joint_angles_rad = [deg_to_rad(j) for j in joint_angles_deg]
-        print(f"\nUsing specified joint angles (degrees):")
+        print("\nUsing specified joint angles (degrees):")
     elif args.simulate:
         joint_angles_deg = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         joint_angles_rad = [deg_to_rad(j) for j in joint_angles_deg]
-        print(f"\nUsing simulated joint angles (degrees):")
+        print("\nUsing simulated joint angles (degrees):")
     else:
         joint_angles_rad = None
         joint_angles_deg = None
@@ -105,7 +114,7 @@ def main():
     print("-" * 60)
     print("Input Joint Angles:")
     for i, (deg, rad) in enumerate(zip(joint_angles_deg, joint_angles_rad)):
-        print(f"  J{i+1}: {deg:8.2f}° ({rad:8.4f} rad)")
+        print(f"  J{i + 1}: {deg:8.2f}° ({rad:8.4f} rad)")
 
     # Compute forward kinematics
     print("-" * 60)
@@ -118,16 +127,23 @@ def main():
     if sdk_pose:
         print_pose(
             "SDK Feedback",
-            sdk_pose.x, sdk_pose.y, sdk_pose.z,
-            sdk_pose.roll, sdk_pose.pitch, sdk_pose.yaw
+            sdk_pose.x,
+            sdk_pose.y,
+            sdk_pose.z,
+            sdk_pose.roll,
+            sdk_pose.pitch,
+            sdk_pose.yaw,
         )
 
         # Compute errors
-        pos_error = math.sqrt(
-            (fk.x - sdk_pose.x)**2 +
-            (fk.y - sdk_pose.y)**2 +
-            (fk.z - sdk_pose.z)**2
-        ) * 1000  # mm
+        pos_error = (
+            math.sqrt(
+                (fk.x - sdk_pose.x) ** 2
+                + (fk.y - sdk_pose.y) ** 2
+                + (fk.z - sdk_pose.z) ** 2
+            )
+            * 1000
+        )  # mm
 
         print("-" * 60)
         print("Comparison:")

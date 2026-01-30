@@ -75,7 +75,7 @@ class MoveResult:
         return (
             f"MoveResult({status}, "
             f"cam=({self.y_cam:.2f}, {self.z_cam:.2f}), "
-            f"arm=({self.x_arm*1000:.1f}, {self.y_arm*1000:.1f}, {self.z_arm*1000:.1f})mm)"
+            f"arm=({self.x_arm * 1000:.1f}, {self.y_arm * 1000:.1f}, {self.z_arm * 1000:.1f})mm)"
         )
 
     def position_mm(self) -> Tuple[float, float, float]:
@@ -340,8 +340,12 @@ class VisionArmController:
 
         # Compute IK
         ik_result = inverse_kinematics(
-            x_arm, y_arm, z_arm,
-            roll, pitch, yaw,
+            x_arm,
+            y_arm,
+            z_arm,
+            roll,
+            pitch,
+            yaw,
             initial_guess=initial_guess,
             config=self.ik_config,
         )
@@ -450,7 +454,8 @@ class VisionArmController:
                 z_cam = j / (grid_size - 1) if grid_size > 1 else 0.5
 
                 result = self.move_to_normalized(
-                    y_cam, z_cam,
+                    y_cam,
+                    z_cam,
                     speed_factor=speed_factor,
                     wait=True,
                 )

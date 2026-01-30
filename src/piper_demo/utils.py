@@ -11,12 +11,12 @@ from typing import List, Tuple, Optional
 # Piper arm joint limits (radians) - 6 joints + gripper
 # Reference: piper_sdk documentation
 JOINT_LIMITS_RAD: List[Tuple[float, float]] = [
-    (-2.618, 2.618),   # Joint 1: -150° to 150°
-    (0.0, 3.14),       # Joint 2: 0° to 180°
-    (-2.967, 0.0),     # Joint 3: -170° to 0°
-    (-1.745, 1.745),   # Joint 4: -100° to 100°
-    (-1.22, 1.22),     # Joint 5: -70° to 70°
-    (-2.094, 2.094),   # Joint 6: -120° to 120°
+    (-2.618, 2.618),  # Joint 1: -150° to 150°
+    (0.0, 3.14),  # Joint 2: 0° to 180°
+    (-2.967, 0.0),  # Joint 3: -170° to 0°
+    (-1.745, 1.745),  # Joint 4: -100° to 100°
+    (-1.22, 1.22),  # Joint 5: -70° to 70°
+    (-2.094, 2.094),  # Joint 6: -120° to 120°
 ]
 
 # Gripper limits (meters)
@@ -100,13 +100,15 @@ def validate_joint_positions(positions: List[float]) -> Tuple[bool, Optional[str
         min_val, max_val = JOINT_LIMITS_RAD[i]
         if pos < min_val or pos > max_val:
             return False, (
-                f"Joint {i+1} position {rad_to_deg(pos):.1f}° "
+                f"Joint {i + 1} position {rad_to_deg(pos):.1f}° "
                 f"out of range [{rad_to_deg(min_val):.1f}°, {rad_to_deg(max_val):.1f}°]"
             )
     return True, None
 
 
-def format_joint_state(positions: List[float], velocities: Optional[List[float]] = None) -> str:
+def format_joint_state(
+    positions: List[float], velocities: Optional[List[float]] = None
+) -> str:
     """Format joint state for display.
 
     Args:
@@ -118,7 +120,7 @@ def format_joint_state(positions: List[float], velocities: Optional[List[float]]
     """
     lines = ["Joint State:"]
     for i, pos in enumerate(positions):
-        line = f"  J{i+1}: {rad_to_deg(pos):7.2f}°"
+        line = f"  J{i + 1}: {rad_to_deg(pos):7.2f}°"
         if velocities and i < len(velocities):
             line += f"  vel: {velocities[i]:6.3f} rad/s"
         lines.append(line)
@@ -135,7 +137,11 @@ def format_end_pose(pose) -> str:
         Formatted string for display
     """
     x_mm, y_mm, z_mm = pose.x * 1000, pose.y * 1000, pose.z * 1000
-    r_deg, p_deg, y_deg = rad_to_deg(pose.roll), rad_to_deg(pose.pitch), rad_to_deg(pose.yaw)
+    r_deg, p_deg, y_deg = (
+        rad_to_deg(pose.roll),
+        rad_to_deg(pose.pitch),
+        rad_to_deg(pose.yaw),
+    )
     lines = [
         "End Pose:",
         f"  Position: ({x_mm:7.1f}, {y_mm:7.1f}, {z_mm:7.1f}) mm",

@@ -74,7 +74,9 @@ def _cross_product(
     )
 
 
-def _compute_rotation_axes(joint_angles: List[float]) -> List[Tuple[float, float, float]]:
+def _compute_rotation_axes(
+    joint_angles: List[float],
+) -> List[Tuple[float, float, float]]:
     """Compute rotation axes for Modified DH convention.
 
     In Modified DH, joint i rotates around the z-axis of frame i (after alpha rotation).
@@ -207,7 +209,9 @@ def _fk_transform(joint_angles: List[float]) -> Matrix4:
     return T
 
 
-def compute_jacobian_numerical(joint_angles: List[float], delta: float = DELTA_THETA) -> Jacobian6x6:
+def compute_jacobian_numerical(
+    joint_angles: List[float], delta: float = DELTA_THETA
+) -> Jacobian6x6:
     """Compute numerical Jacobian using finite differences.
 
     Uses central difference for better accuracy:
@@ -270,7 +274,9 @@ def _transpose_rotation(T: Matrix4) -> Matrix4:
     ]
 
 
-def compute_jacobian(joint_angles: List[float], method: str = "numerical") -> Jacobian6x6:
+def compute_jacobian(
+    joint_angles: List[float], method: str = "numerical"
+) -> Jacobian6x6:
     """Compute Jacobian matrix.
 
     Args:

@@ -157,19 +157,15 @@ def run_demo(conn, reader, motion, gripper, dry_run: bool = False):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Full demo of Piper arm capabilities"
-    )
+    parser = argparse.ArgumentParser(description="Full demo of Piper arm capabilities")
     parser.add_argument(
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Speed factor 0.0-1.0 (default: 0.3)"
+        "--speed", type=float, default=0.3, help="Speed factor 0.0-1.0 (default: 0.3)"
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Print actions without moving the arm"
+        "--dry-run", action="store_true", help="Print actions without moving the arm"
     )
     args = parser.parse_args()
 

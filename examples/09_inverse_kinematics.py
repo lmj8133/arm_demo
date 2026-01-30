@@ -33,18 +33,24 @@ from jacobian import compute_jacobian, is_near_singularity, jacobian_determinant
 from utils import deg_to_rad, rad_to_deg
 
 
-def print_pose(label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float):
+def print_pose(
+    label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
+):
     """Print pose in a formatted way."""
     print(f"\n{label}:")
-    print(f"  Position:    X={x*1000:8.2f} mm, Y={y*1000:8.2f} mm, Z={z*1000:8.2f} mm")
-    print(f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°")
+    print(
+        f"  Position:    X={x * 1000:8.2f} mm, Y={y * 1000:8.2f} mm, Z={z * 1000:8.2f} mm"
+    )
+    print(
+        f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°"
+    )
 
 
 def print_joints(label: str, angles_rad: list):
     """Print joint angles."""
     print(f"\n{label}:")
     for i, rad in enumerate(angles_rad):
-        print(f"  J{i+1}: {rad_to_deg(rad):8.2f}° ({rad:8.4f} rad)")
+        print(f"  J{i + 1}: {rad_to_deg(rad):8.2f}° ({rad:8.4f} rad)")
 
 
 def main():
@@ -52,30 +58,35 @@ def main():
         description="Inverse kinematics test for Piper arm"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--target", nargs=6, type=float, default=None,
+        "--target",
+        nargs=6,
+        type=float,
+        default=None,
         metavar=("X", "Y", "Z", "ROLL", "PITCH", "YAW"),
-        help="Target pose: x,y,z in mm; roll,pitch,yaw in degrees"
+        help="Target pose: x,y,z in mm; roll,pitch,yaw in degrees",
     )
     parser.add_argument(
-        "--from-arm", action="store_true",
-        help="Read current arm pose as target"
+        "--from-arm", action="store_true", help="Read current arm pose as target"
     )
     parser.add_argument(
-        "--initial", nargs=6, type=float, default=None,
+        "--initial",
+        nargs=6,
+        type=float,
+        default=None,
         metavar=("J1", "J2", "J3", "J4", "J5", "J6"),
-        help="Initial guess in degrees (default: [0, 30, -30, 0, 0, 0])"
+        help="Initial guess in degrees (default: [0, 30, -30, 0, 0, 0])",
     )
     parser.add_argument(
-        "--max-iter", type=int, default=100,
-        help="Maximum iterations (default: 100)"
+        "--max-iter", type=int, default=100, help="Maximum iterations (default: 100)"
     )
     parser.add_argument(
-        "--damping", type=float, default=0.05,
-        help="Damping factor for DLS (default: 0.05)"
+        "--damping",
+        type=float,
+        default=0.05,
+        help="Damping factor for DLS (default: 0.05)",
     )
     args = parser.parse_args()
 
@@ -133,7 +144,15 @@ def main():
         target_yaw = 0.0
         print("\nUsing default target pose")
 
-    print_pose("Target Pose", target_x, target_y, target_z, target_roll, target_pitch, target_yaw)
+    print_pose(
+        "Target Pose",
+        target_x,
+        target_y,
+        target_z,
+        target_roll,
+        target_pitch,
+        target_yaw,
+    )
 
     # Initial guess
     if args.initial:
@@ -159,13 +178,17 @@ def main():
     print("Running Inverse Kinematics (Damped Least Squares)...")
     print(f"  Max iterations: {config.max_iterations}")
     print(f"  Damping factor: {config.damping_factor}")
-    print(f"  Position tolerance: {config.position_tolerance*1000:.3f} mm")
+    print(f"  Position tolerance: {config.position_tolerance * 1000:.3f} mm")
     print(f"  Orientation tolerance: {rad_to_deg(config.orientation_tolerance):.3f}°")
 
     # Compute IK
     result = inverse_kinematics(
-        target_x, target_y, target_z,
-        target_roll, target_pitch, target_yaw,
+        target_x,
+        target_y,
+        target_z,
+        target_roll,
+        target_pitch,
+        target_yaw,
         initial_guess=initial_guess,
         config=config,
     )
@@ -176,7 +199,7 @@ def main():
     else:
         print(f"[WARNING] Did not converge after {result.iterations} iterations")
 
-    print(f"  Position error:    {result.position_error*1000:.4f} mm")
+    print(f"  Position error:    {result.position_error * 1000:.4f} mm")
     print(f"  Orientation error: {rad_to_deg(result.orientation_error):.4f}°")
 
     print_joints("IK Solution", result.joint_angles)
@@ -189,11 +212,15 @@ def main():
 
     # Verify errors
     pos_err, ori_err = verify_ik_solution(
-        target_x, target_y, target_z,
-        target_roll, target_pitch, target_yaw,
-        result.joint_angles
+        target_x,
+        target_y,
+        target_z,
+        target_roll,
+        target_pitch,
+        target_yaw,
+        result.joint_angles,
     )
-    print(f"\n  Verification position error:    {pos_err*1000:.4f} mm")
+    print(f"\n  Verification position error:    {pos_err * 1000:.4f} mm")
     print(f"  Verification orientation error: {rad_to_deg(ori_err):.4f}°")
 
     # Check singularity at solution
@@ -201,7 +228,7 @@ def main():
     J = compute_jacobian(result.joint_angles)
     det = jacobian_determinant(J)
     singular = is_near_singularity(result.joint_angles)
-    print(f"Jacobian Analysis:")
+    print("Jacobian Analysis:")
     print(f"  Determinant: {det:.6f}")
     print(f"  Near singularity: {'Yes' if singular else 'No'}")
 

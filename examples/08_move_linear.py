@@ -43,15 +43,9 @@ def main():
     parser.add_argument(
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
-    parser.add_argument(
-        "--x", type=float, required=True, help="X position in meters"
-    )
-    parser.add_argument(
-        "--y", type=float, required=True, help="Y position in meters"
-    )
-    parser.add_argument(
-        "--z", type=float, required=True, help="Z position in meters"
-    )
+    parser.add_argument("--x", type=float, required=True, help="X position in meters")
+    parser.add_argument("--y", type=float, required=True, help="Y position in meters")
+    parser.add_argument("--z", type=float, required=True, help="Z position in meters")
     parser.add_argument(
         "--roll", type=float, default=0.0, help="Roll angle in degrees (default: 0)"
     )
@@ -62,35 +56,42 @@ def main():
         "--yaw", type=float, default=0.0, help="Yaw angle in degrees (default: 0)"
     )
     parser.add_argument(
-        "--speed", type=float, default=0.2,
-        help="Speed factor 0.0-1.0 (default: 0.2)"
+        "--speed", type=float, default=0.2, help="Speed factor 0.0-1.0 (default: 0.2)"
     )
     parser.add_argument(
-        "--continuous", action="store_true",
-        help="Use continuous control mode with pose feedback"
+        "--continuous",
+        action="store_true",
+        help="Use continuous control mode with pose feedback",
     )
     parser.add_argument(
-        "--timeout", type=float, default=10.0,
-        help="Timeout in seconds for continuous mode (default: 10)"
+        "--timeout",
+        type=float,
+        default=10.0,
+        help="Timeout in seconds for continuous mode (default: 10)",
     )
     parser.add_argument(
-        "--settle", type=float, default=0.5,
-        help="Settle time in seconds after reaching target (default: 0.5)"
+        "--settle",
+        type=float,
+        default=0.5,
+        help="Settle time in seconds after reaching target (default: 0.5)",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
-        help="Print pose updates during motion"
+        "--verbose", "-v", action="store_true", help="Print pose updates during motion"
     )
     args = parser.parse_args()
 
-    print(f"[INFO] MoveL (Linear Interpolation) mode")
-    print(f"       Target pose:")
+    print("[INFO] MoveL (Linear Interpolation) mode")
+    print("       Target pose:")
     print(f"       Position: ({args.x:.3f}, {args.y:.3f}, {args.z:.3f}) m")
-    print(f"       Orientation: (R:{args.roll:.1f}, P:{args.pitch:.1f}, Y:{args.yaw:.1f}) deg")
+    print(
+        f"       Orientation: (R:{args.roll:.1f}, P:{args.pitch:.1f}, Y:{args.yaw:.1f}) deg"
+    )
     print(f"       Speed factor: {args.speed}")
-    mode_str = f"Continuous (settle: {args.settle}s)" if args.continuous else "Single command"
+    mode_str = (
+        f"Continuous (settle: {args.settle}s)" if args.continuous else "Single command"
+    )
     print(f"       Mode: {mode_str}")
-    print(f"[WARN] The arm will move in a STRAIGHT LINE! Ensure workspace is clear.")
+    print("[WARN] The arm will move in a STRAIGHT LINE! Ensure workspace is clear.")
     print()
 
     try:
@@ -100,7 +101,7 @@ def main():
 
             # Read current end-effector pose
             pose = reader.read_end_pose()
-            print(f"[INFO] Current end-effector pose:")
+            print("[INFO] Current end-effector pose:")
             print(pose)
             print()
 
@@ -126,7 +127,9 @@ def main():
                     if args.verbose and now - last_print_time[0] >= 0.5:
                         last_print_time[0] = now
                         x_mm, y_mm, z_mm = current_pose.position_mm()
-                        print(f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm")
+                        print(
+                            f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm"
+                        )
 
                 reached = motion.move_linear_continuous(
                     x=args.x,
@@ -178,7 +181,7 @@ def main():
 
             # Read final pose
             final_pose = reader.read_end_pose()
-            print(f"\n[INFO] Final end-effector pose:")
+            print("\n[INFO] Final end-effector pose:")
             print(final_pose)
 
             # Safely disable arm (returns to home first)

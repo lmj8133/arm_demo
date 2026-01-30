@@ -27,6 +27,7 @@ except ImportError:
 @dataclass
 class AxisBounds:
     """Min/max bounds for a single axis in meters."""
+
     min: float
     max: float
 
@@ -52,11 +53,14 @@ class WorkspaceBounds:
         - y_arm: left/right (左右)
         - z_arm: up/down (高度)
     """
+
     x_arm: AxisBounds = field(default_factory=lambda: AxisBounds(0.10, 0.35))
     y_arm: AxisBounds = field(default_factory=lambda: AxisBounds(-0.15, 0.15))
     z_arm: AxisBounds = field(default_factory=lambda: AxisBounds(0.05, 0.25))
 
-    def clamp_position(self, x: float, y: float, z: float) -> Tuple[float, float, float]:
+    def clamp_position(
+        self, x: float, y: float, z: float
+    ) -> Tuple[float, float, float]:
         """Clamp position to workspace bounds."""
         return (
             self.x_arm.clamp(x),
@@ -83,6 +87,7 @@ class SafeHeightConfig:
         - "constant": Fixed Z value (base_z)
         - "adaptive": Z varies based on XY distance from center
     """
+
     strategy: str = "adaptive"
     # Constant strategy
     base_z: float = 0.10  # meters
@@ -128,6 +133,7 @@ class SafeHeightConfig:
 @dataclass
 class OrientationConfig:
     """End-effector orientation configuration (degrees)."""
+
     roll: float = 0.0
     pitch: float = 90.0  # Pointing downward
     yaw: float = 0.0
@@ -144,6 +150,7 @@ class OrientationConfig:
 @dataclass
 class MotionConfig:
     """Motion control configuration."""
+
     default_speed: float = 0.3
     singularity_check: bool = True
     singularity_threshold: float = 0.001
@@ -172,6 +179,7 @@ class CameraMappingConfig:
           default_speed: 0.3
           singularity_check: true
     """
+
     workspace: WorkspaceBounds = field(default_factory=WorkspaceBounds)
     safe_height: SafeHeightConfig = field(default_factory=SafeHeightConfig)
     orientation: OrientationConfig = field(default_factory=OrientationConfig)
@@ -225,12 +233,18 @@ class CameraMappingConfig:
             # Handle nested adaptive config
             if "adaptive" in sh:
                 adaptive = sh["adaptive"]
-                config.safe_height.base_z = adaptive.get("base_z", config.safe_height.base_z)
+                config.safe_height.base_z = adaptive.get(
+                    "base_z", config.safe_height.base_z
+                )
                 config.safe_height.distance_factor = adaptive.get(
                     "distance_factor", config.safe_height.distance_factor
                 )
-                config.safe_height.z_min = adaptive.get("z_min", config.safe_height.z_min)
-                config.safe_height.z_max = adaptive.get("z_max", config.safe_height.z_max)
+                config.safe_height.z_min = adaptive.get(
+                    "z_min", config.safe_height.z_min
+                )
+                config.safe_height.z_max = adaptive.get(
+                    "z_max", config.safe_height.z_max
+                )
 
         if "orientation" in data:
             ori = data["orientation"]
@@ -254,9 +268,18 @@ class CameraMappingConfig:
         """Convert configuration to dictionary."""
         return {
             "workspace": {
-                "x_arm": {"min": self.workspace.x_arm.min, "max": self.workspace.x_arm.max},
-                "y_arm": {"min": self.workspace.y_arm.min, "max": self.workspace.y_arm.max},
-                "z_arm": {"min": self.workspace.z_arm.min, "max": self.workspace.z_arm.max},
+                "x_arm": {
+                    "min": self.workspace.x_arm.min,
+                    "max": self.workspace.x_arm.max,
+                },
+                "y_arm": {
+                    "min": self.workspace.y_arm.min,
+                    "max": self.workspace.y_arm.max,
+                },
+                "z_arm": {
+                    "min": self.workspace.z_arm.min,
+                    "max": self.workspace.z_arm.max,
+                },
             },
             "safe_height": {
                 "strategy": self.safe_height.strategy,
@@ -511,9 +534,7 @@ class SafeHeightProjector:
         Returns:
             Safe Z value in meters (height)
         """
-        return self.config.safe_height.compute_z(
-            x_arm, y_arm, self.config.workspace
-        )
+        return self.config.safe_height.compute_z(x_arm, y_arm, self.config.workspace)
 
     def compute_full_position(
         self, x_arm: float, y_arm: float

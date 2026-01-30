@@ -17,6 +17,7 @@ import numpy as np
 
 class CameraCaptureError(Exception):
     """Exception raised for camera-related errors."""
+
     pass
 
 
@@ -73,9 +74,7 @@ class CameraCapture:
         self._cap = cv2.VideoCapture(self.device)
 
         if not self._cap.isOpened():
-            raise CameraCaptureError(
-                f"Failed to open camera device: {self.device}"
-            )
+            raise CameraCaptureError(f"Failed to open camera device: {self.device}")
 
         # Set resolution and FPS
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)

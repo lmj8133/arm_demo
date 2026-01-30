@@ -60,9 +60,7 @@ class Detection:
         """Get bounding box area in pixels squared."""
         return self.width * self.height
 
-    def normalized_center(
-        self, img_width: int, img_height: int
-    ) -> Tuple[float, float]:
+    def normalized_center(self, img_width: int, img_height: int) -> Tuple[float, float]:
         """Get center normalized to 0-1 range.
 
         Args:
@@ -90,6 +88,7 @@ class Detection:
 
 class PlateDetectorError(Exception):
     """Exception raised for detector-related errors."""
+
     pass
 
 
@@ -123,19 +122,17 @@ class PlateDetector:
         self.device = device
 
         if not self.model_path.exists():
-            raise PlateDetectorError(
-                f"Model file not found: {self.model_path}"
-            )
+            raise PlateDetectorError(f"Model file not found: {self.model_path}")
 
         try:
             from ultralytics import YOLO
+
             self._model = YOLO(str(self.model_path))
             if device:
                 self._model.to(device)
         except ImportError:
             raise PlateDetectorError(
-                "ultralytics package not installed. "
-                "Run: pip install ultralytics"
+                "ultralytics package not installed. Run: pip install ultralytics"
             )
         except Exception as e:
             raise PlateDetectorError(f"Failed to load model: {e}") from e
@@ -195,6 +192,5 @@ class PlateDetector:
 
     def __repr__(self) -> str:
         return (
-            f"PlateDetector(model={self.model_path.name}, "
-            f"conf={self.conf_threshold})"
+            f"PlateDetector(model={self.model_path.name}, conf={self.conf_threshold})"
         )

@@ -40,7 +40,9 @@ def make_callback(reader: JointReader, show_pose: bool, show_fk: bool):
     def print_state(state):
         """Callback to print joint state and optional pose/FK."""
         positions_deg = state.positions_deg()
-        joints_str = " | ".join([f"J{i+1}:{p:6.1f}°" for i, p in enumerate(positions_deg)])
+        joints_str = " | ".join(
+            [f"J{i + 1}:{p:6.1f}°" for i, p in enumerate(positions_deg)]
+        )
         gripper_mm = state.gripper * 1000
 
         extra = ""
@@ -71,15 +73,18 @@ def main():
         "--rate", type=float, default=10.0, help="Reading rate in Hz (default: 10)"
     )
     parser.add_argument(
-        "--duration", type=float, default=None, help="Duration in seconds (default: infinite)"
+        "--duration",
+        type=float,
+        default=None,
+        help="Duration in seconds (default: infinite)",
     )
     parser.add_argument(
-        "--pose", action="store_true",
-        help="Show SDK-reported end-effector pose (use this for move_cartesian)"
+        "--pose",
+        action="store_true",
+        help="Show SDK-reported end-effector pose (use this for move_cartesian)",
     )
     parser.add_argument(
-        "--fk", action="store_true",
-        help="Show calculated FK position (for debugging)"
+        "--fk", action="store_true", help="Show calculated FK position (for debugging)"
     )
     args = parser.parse_args()
 

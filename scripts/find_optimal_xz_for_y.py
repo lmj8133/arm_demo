@@ -63,8 +63,12 @@ def compute_y_range(
         y = y_min + (y_max - y_min) * i / (y_samples - 1)
 
         result = inverse_kinematics(
-            x_fixed, y, z_height,
-            roll, pitch, yaw,
+            x_fixed,
+            y,
+            z_height,
+            roll,
+            pitch,
+            yaw,
             initial_guess=initial_guess,
             config=ik_config,
         )
@@ -206,9 +210,15 @@ def main():
         y_search = (home_fk.y - args.y_range_offset, home_fk.y + args.y_range_offset)
 
     print("Search parameters:")
-    print(f"  X (front/back) range: {x_min*1000:.0f} ~ {x_max*1000:.0f} mm ({args.x_steps} steps)")
-    print(f"  Z (height) range: {z_min*1000:.0f} ~ {z_max*1000:.0f} mm ({args.z_steps} steps)")
-    print(f"  Y (left/right) search: {y_search[0]*1000:.0f} ~ {y_search[1]*1000:.0f} mm ({args.y_samples} samples)")
+    print(
+        f"  X (front/back) range: {x_min * 1000:.0f} ~ {x_max * 1000:.0f} mm ({args.x_steps} steps)"
+    )
+    print(
+        f"  Z (height) range: {z_min * 1000:.0f} ~ {z_max * 1000:.0f} mm ({args.z_steps} steps)"
+    )
+    print(
+        f"  Y (left/right) search: {y_search[0] * 1000:.0f} ~ {y_search[1] * 1000:.0f} mm ({args.y_samples} samples)"
+    )
     print(f"  Total combinations: {args.x_steps * args.z_steps}")
     print()
 
@@ -236,10 +246,18 @@ def main():
     print("-" * 60)
 
     for i in range(args.x_steps):
-        x = x_min + (x_max - x_min) * i / (args.x_steps - 1) if args.x_steps > 1 else x_min
+        x = (
+            x_min + (x_max - x_min) * i / (args.x_steps - 1)
+            if args.x_steps > 1
+            else x_min
+        )
 
         for j in range(args.z_steps):
-            z = z_min + (z_max - z_min) * j / (args.z_steps - 1) if args.z_steps > 1 else z_min
+            z = (
+                z_min + (z_max - z_min) * j / (args.z_steps - 1)
+                if args.z_steps > 1
+                else z_min
+            )
 
             y_min_reach, y_max_reach, span, count, center_joints = compute_y_range(
                 x_fixed=x,
@@ -265,9 +283,13 @@ def main():
                 marker = " <- Best"
 
             if args.verbose or marker:
-                print(f"X={x*1000:6.1f}mm, Z={z*1000:6.1f}mm -> Y range: {span*1000:6.1f} mm ({count:2d} pts){marker}")
+                print(
+                    f"X={x * 1000:6.1f}mm, Z={z * 1000:6.1f}mm -> Y range: {span * 1000:6.1f} mm ({count:2d} pts){marker}"
+                )
             elif count == 0:
-                print(f"X={x*1000:6.1f}mm, Z={z*1000:6.1f}mm -> Y range: 0 mm (unreachable)")
+                print(
+                    f"X={x * 1000:6.1f}mm, Z={z * 1000:6.1f}mm -> Y range: 0 mm (unreachable)"
+                )
 
     print("-" * 60)
     print()
@@ -276,9 +298,11 @@ def main():
         print("=" * 60)
         print("RESULT")
         print("=" * 60)
-        print(f"Optimal X (front/back): {best_x*1000:.1f} mm ({best_x:.5f} m)")
-        print(f"Optimal Z (height): {best_z*1000:.1f} mm ({best_z:.5f} m)")
-        print(f"Reachable Y range: {best_y_min*1000:.1f} ~ {best_y_max*1000:.1f} mm (span: {best_span*1000:.1f} mm)")
+        print(f"Optimal X (front/back): {best_x * 1000:.1f} mm ({best_x:.5f} m)")
+        print(f"Optimal Z (height): {best_z * 1000:.1f} mm ({best_z:.5f} m)")
+        print(
+            f"Reachable Y range: {best_y_min * 1000:.1f} ~ {best_y_max * 1000:.1f} mm (span: {best_span * 1000:.1f} mm)"
+        )
         print(f"IK-solvable points: {best_count}/{args.y_samples}")
         print()
 
@@ -298,8 +322,12 @@ def main():
         print()
 
         # Compare with home position
-        print(f"HOME X: {home_fk.x*1000:.1f} mm, Delta: {(best_x - home_fk.x)*1000:+.1f} mm")
-        print(f"HOME Z: {home_fk.z*1000:.1f} mm, Delta: {(best_z - home_fk.z)*1000:+.1f} mm")
+        print(
+            f"HOME X: {home_fk.x * 1000:.1f} mm, Delta: {(best_x - home_fk.x) * 1000:+.1f} mm"
+        )
+        print(
+            f"HOME Z: {home_fk.z * 1000:.1f} mm, Delta: {(best_z - home_fk.z) * 1000:+.1f} mm"
+        )
     else:
         print("[ERROR] No reachable points found in the search range!")
         return 1

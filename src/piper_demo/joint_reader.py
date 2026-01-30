@@ -22,6 +22,7 @@ class EndPoseState:
         roll, pitch, yaw: Orientation in radians
         timestamp: Reading timestamp
     """
+
     x: float
     y: float
     z: float
@@ -51,6 +52,7 @@ class JointState:
         gripper: Gripper opening in meters
         timestamp: Reading timestamp
     """
+
     positions: List[float]
     gripper: float
     timestamp: float
@@ -200,7 +202,7 @@ class JointReader:
         # SDK returns: X/Y/Z in 0.001mm, RX/RY/RZ in 0.001 degrees
         # Convert to meters and radians
         return EndPoseState(
-            x=pose_msg.end_pose.X_axis / 1_000_000,    # 0.001mm -> m
+            x=pose_msg.end_pose.X_axis / 1_000_000,  # 0.001mm -> m
             y=pose_msg.end_pose.Y_axis / 1_000_000,
             z=pose_msg.end_pose.Z_axis / 1_000_000,
             roll=deg_to_rad(pose_msg.end_pose.RX_axis / 1000),  # 0.001deg -> rad
@@ -235,7 +237,9 @@ class JointReader:
 
             # Check if all joints are within tolerance
             all_reached = True
-            for i, (current, target) in enumerate(zip(state.positions, target_positions)):
+            for i, (current, target) in enumerate(
+                zip(state.positions, target_positions)
+            ):
                 if abs(current - target) > tolerance_rad:
                     all_reached = False
                     break
@@ -274,6 +278,7 @@ class JointReader:
             True if pose reached within timeout
         """
         import math
+
         start_time = time.time()
         period = 1.0 / rate_hz
 
@@ -282,9 +287,9 @@ class JointReader:
 
             # Check position
             pos_error = math.sqrt(
-                (pose.x - target_x) ** 2 +
-                (pose.y - target_y) ** 2 +
-                (pose.z - target_z) ** 2
+                (pose.x - target_x) ** 2
+                + (pose.y - target_y) ** 2
+                + (pose.z - target_z) ** 2
             )
             if pos_error > tolerance_m:
                 time.sleep(period)
@@ -292,9 +297,9 @@ class JointReader:
 
             # Check orientation
             orient_ok = (
-                abs(pose.roll - target_roll) <= tolerance_rad and
-                abs(pose.pitch - target_pitch) <= tolerance_rad and
-                abs(pose.yaw - target_yaw) <= tolerance_rad
+                abs(pose.roll - target_roll) <= tolerance_rad
+                and abs(pose.pitch - target_pitch) <= tolerance_rad
+                and abs(pose.yaw - target_yaw) <= tolerance_rad
             )
             if orient_ok:
                 return True

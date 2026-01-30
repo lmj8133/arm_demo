@@ -52,7 +52,7 @@ def main():
         # Read current pose
         time.sleep(0.5)
         pose = reader.read_end_pose()
-        print(f"\n[2] Current pose after enable:")
+        print("\n[2] Current pose after enable:")
         print(f"    X = {pose.x * 1000:.1f} mm")
         print(f"    Y = {pose.y * 1000:.1f} mm")
         print(f"    Z = {pose.z * 1000:.1f} mm")
@@ -64,27 +64,35 @@ def main():
         print(f"    Yaw   = {yaw_deg:.1f}°")
 
         # Step 1: Use MOVEP to go to start position (official example style)
-        print(f"\n[3] Moving to start position with MOVEP (0x00)...")
-        print(f"    Target: ({START_X/1000:.0f}, {START_Y/1000:.0f}, {START_Z/1000:.0f}) mm")
-        print(f"    Orientation: (RX={OFFICIAL_RX/1000:.1f}°, RY={OFFICIAL_RY/1000:.1f}°, RZ={OFFICIAL_RZ/1000:.1f}°)")
+        print("\n[3] Moving to start position with MOVEP (0x00)...")
+        print(
+            f"    Target: ({START_X / 1000:.0f}, {START_Y / 1000:.0f}, {START_Z / 1000:.0f}) mm"
+        )
+        print(
+            f"    Orientation: (RX={OFFICIAL_RX / 1000:.1f}°, RY={OFFICIAL_RY / 1000:.1f}°, RZ={OFFICIAL_RZ / 1000:.1f}°)"
+        )
 
         # Send MOVEP command continuously for 3 seconds
         start_time = time.time()
         while time.time() - start_time < 3.0:
             piper.MotionCtrl_2(0x01, 0x00, 50, 0x00)  # MOVEP mode
-            piper.EndPoseCtrl(START_X, START_Y, START_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ)
+            piper.EndPoseCtrl(
+                START_X, START_Y, START_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ
+            )
             time.sleep(0.02)
 
         # Check position
         pose = reader.read_end_pose()
-        print(f"\n[4] Pose after MOVEP:")
+        print("\n[4] Pose after MOVEP:")
         print(f"    X = {pose.x * 1000:.1f} mm")
         print(f"    Y = {pose.y * 1000:.1f} mm")
         print(f"    Z = {pose.z * 1000:.1f} mm")
 
         # Step 2: Use MOVEL to move Y axis
-        print(f"\n[5] Moving with MOVEL (0x02) - Y from -50 to +50 mm...")
-        print(f"    Target: ({TARGET_X/1000:.0f}, {TARGET_Y/1000:.0f}, {TARGET_Z/1000:.0f}) mm")
+        print("\n[5] Moving with MOVEL (0x02) - Y from -50 to +50 mm...")
+        print(
+            f"    Target: ({TARGET_X / 1000:.0f}, {TARGET_Y / 1000:.0f}, {TARGET_Z / 1000:.0f}) mm"
+        )
 
         start_time = time.time()
         sample_count = 0
@@ -92,20 +100,24 @@ def main():
 
         while time.time() - start_time < 5.0:
             piper.MotionCtrl_2(0x01, 0x02, 50, 0x00)  # MOVEL mode
-            piper.EndPoseCtrl(TARGET_X, TARGET_Y, TARGET_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ)
+            piper.EndPoseCtrl(
+                TARGET_X, TARGET_Y, TARGET_Z, OFFICIAL_RX, OFFICIAL_RY, OFFICIAL_RZ
+            )
 
             if sample_count % 25 == 0:
                 current = reader.read_end_pose()
                 elapsed = time.time() - start_time
                 dy = current.y * 1000 - initial_y
-                print(f"    [{elapsed:.1f}s] Y = {current.y * 1000:.1f} mm (dY = {dy:+.1f} mm)")
+                print(
+                    f"    [{elapsed:.1f}s] Y = {current.y * 1000:.1f} mm (dY = {dy:+.1f} mm)"
+                )
 
             sample_count += 1
             time.sleep(0.02)
 
         # Final check
         final_pose = reader.read_end_pose()
-        print(f"\n[6] Final pose:")
+        print("\n[6] Final pose:")
         print(f"    X = {final_pose.x * 1000:.1f} mm")
         print(f"    Y = {final_pose.y * 1000:.1f} mm")
         print(f"    Z = {final_pose.z * 1000:.1f} mm")

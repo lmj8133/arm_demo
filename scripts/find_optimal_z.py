@@ -127,8 +127,12 @@ def compute_reachable_area(
             y = y_min + (y_max - y_min) * j / (xy_samples - 1)
 
             result = inverse_kinematics(
-                x, y, z_height,
-                roll, pitch, yaw,
+                x,
+                y,
+                z_height,
+                roll,
+                pitch,
+                yaw,
                 initial_guess=initial_guess,
                 config=ik_config,
             )
@@ -221,7 +225,7 @@ def main():
     print("(REP-103: X=front, Y=left, Z=up)")
     print("=" * 60)
     print()
-    print(f"HOME_POSITION FK:")
+    print("HOME_POSITION FK:")
     x_mm, y_mm, z_mm = home_fk.position_mm()
     print(f"  Position: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
     r_deg, p_deg, yw_deg = home_fk.orientation_deg()
@@ -243,11 +247,19 @@ def main():
     else:
         y_range = (home_fk.y - args.xy_range, home_fk.y + args.xy_range)
 
-    print(f"Search parameters:")
-    print(f"  Z (height) range: {z_min*1000:.0f} ~ {z_max*1000:.0f} mm ({args.z_steps} steps)")
-    print(f"  X (front/back) range: {x_range[0]*1000:.0f} ~ {x_range[1]*1000:.0f} mm")
-    print(f"  Y (left/right) range: {y_range[0]*1000:.0f} ~ {y_range[1]*1000:.0f} mm")
-    print(f"  XY grid: {args.xy_samples}x{args.xy_samples} = {args.xy_samples**2} samples per Z")
+    print("Search parameters:")
+    print(
+        f"  Z (height) range: {z_min * 1000:.0f} ~ {z_max * 1000:.0f} mm ({args.z_steps} steps)"
+    )
+    print(
+        f"  X (front/back) range: {x_range[0] * 1000:.0f} ~ {x_range[1] * 1000:.0f} mm"
+    )
+    print(
+        f"  Y (left/right) range: {y_range[0] * 1000:.0f} ~ {y_range[1] * 1000:.0f} mm"
+    )
+    print(
+        f"  XY grid: {args.xy_samples}x{args.xy_samples} = {args.xy_samples**2} samples per Z"
+    )
     print()
 
     # IK configuration
@@ -296,13 +308,19 @@ def main():
             best_count = len(points)
             marker = " <- Best"
 
-        print(f"Z={z*1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}")
+        print(
+            f"Z={z * 1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}"
+        )
 
         if args.verbose and points:
             x_vals = [p[0] for p in points]
             y_vals = [p[1] for p in points]
-            print(f"             X: [{min(x_vals)*1000:.0f}, {max(x_vals)*1000:.0f}] mm")
-            print(f"             Y: [{min(y_vals)*1000:.0f}, {max(y_vals)*1000:.0f}] mm")
+            print(
+                f"             X: [{min(x_vals) * 1000:.0f}, {max(x_vals) * 1000:.0f}] mm"
+            )
+            print(
+                f"             Y: [{min(y_vals) * 1000:.0f}, {max(y_vals) * 1000:.0f}] mm"
+            )
 
     print("-" * 60)
     print()
@@ -311,8 +329,8 @@ def main():
         print("=" * 60)
         print("RESULT")
         print("=" * 60)
-        print(f"Optimal Z (height): {best_z*1000:.1f} mm ({best_z:.5f} m)")
-        print(f"Reachable XY area: {best_area*10000:.1f} cm²")
+        print(f"Optimal Z (height): {best_z * 1000:.1f} mm ({best_z:.5f} m)")
+        print(f"Reachable XY area: {best_area * 10000:.1f} cm²")
         print(f"IK-solvable points: {best_count}/{args.xy_samples**2}")
         print()
         print("Usage in code:")

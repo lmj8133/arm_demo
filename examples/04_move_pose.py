@@ -38,51 +38,61 @@ def main():
     parser.add_argument(
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
+    parser.add_argument("--x", type=float, required=True, help="X position in meters")
+    parser.add_argument("--y", type=float, required=True, help="Y position in meters")
+    parser.add_argument("--z", type=float, required=True, help="Z position in meters")
     parser.add_argument(
-        "--x", type=float, required=True, help="X position in meters"
+        "--roll",
+        type=float,
+        default=None,
+        help="Roll angle in degrees (default: current)",
     )
     parser.add_argument(
-        "--y", type=float, required=True, help="Y position in meters"
+        "--pitch",
+        type=float,
+        default=None,
+        help="Pitch angle in degrees (default: current)",
     )
     parser.add_argument(
-        "--z", type=float, required=True, help="Z position in meters"
+        "--yaw",
+        type=float,
+        default=None,
+        help="Yaw angle in degrees (default: current)",
     )
     parser.add_argument(
-        "--roll", type=float, default=None, help="Roll angle in degrees (default: current)"
+        "--speed", type=float, default=0.2, help="Speed factor 0.0-1.0 (default: 0.2)"
     )
     parser.add_argument(
-        "--pitch", type=float, default=None, help="Pitch angle in degrees (default: current)"
+        "--no-continuous",
+        action="store_true",
+        help="Use single command mode instead of continuous control",
     )
     parser.add_argument(
-        "--yaw", type=float, default=None, help="Yaw angle in degrees (default: current)"
+        "--timeout",
+        type=float,
+        default=10.0,
+        help="Timeout in seconds for continuous mode (default: 10)",
     )
     parser.add_argument(
-        "--speed", type=float, default=0.2,
-        help="Speed factor 0.0-1.0 (default: 0.2)"
+        "--settle",
+        type=float,
+        default=0.5,
+        help="Settle time in seconds after reaching target (default: 0.5)",
     )
     parser.add_argument(
-        "--no-continuous", action="store_true",
-        help="Use single command mode instead of continuous control"
-    )
-    parser.add_argument(
-        "--timeout", type=float, default=10.0,
-        help="Timeout in seconds for continuous mode (default: 10)"
-    )
-    parser.add_argument(
-        "--settle", type=float, default=0.5,
-        help="Settle time in seconds after reaching target (default: 0.5)"
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true",
-        help="Print pose updates during motion"
+        "--verbose", "-v", action="store_true", help="Print pose updates during motion"
     )
     args = parser.parse_args()
 
     print(f"[INFO] Target position: ({args.x:.3f}, {args.y:.3f}, {args.z:.3f}) m")
     print(f"       Speed factor: {args.speed}")
-    mode_str = "Single command" if args.no_continuous else f"Continuous (settle: {args.settle}s)"
+    mode_str = (
+        "Single command"
+        if args.no_continuous
+        else f"Continuous (settle: {args.settle}s)"
+    )
     print(f"       Mode: {mode_str}")
-    print(f"[WARN] The arm will move! Ensure workspace is clear.")
+    print("[WARN] The arm will move! Ensure workspace is clear.")
     print()
 
     try:
@@ -92,25 +102,29 @@ def main():
 
             # Read current joint state
             state = reader.read_joints()
-            print(f"[INFO] Current joint state:")
+            print("[INFO] Current joint state:")
             print(state)
             print()
 
             # Read current end-effector pose
             pose = reader.read_end_pose()
-            print(f"[INFO] Current end-effector pose:")
+            print("[INFO] Current end-effector pose:")
             print(pose)
             print()
 
             # Use current orientation if not specified
-            current_roll_deg, current_pitch_deg, current_yaw_deg = pose.orientation_deg()
+            current_roll_deg, current_pitch_deg, current_yaw_deg = (
+                pose.orientation_deg()
+            )
             roll_deg = args.roll if args.roll is not None else current_roll_deg
             pitch_deg = args.pitch if args.pitch is not None else current_pitch_deg
             yaw_deg = args.yaw if args.yaw is not None else current_yaw_deg
 
-            print(f"[INFO] Target orientation: (R:{roll_deg:.1f}°, P:{pitch_deg:.1f}°, Y:{yaw_deg:.1f}°)")
+            print(
+                f"[INFO] Target orientation: (R:{roll_deg:.1f}°, P:{pitch_deg:.1f}°, Y:{yaw_deg:.1f}°)"
+            )
             if args.roll is None or args.pitch is None or args.yaw is None:
-                print(f"       (Using current values for unspecified orientation)")
+                print("       (Using current values for unspecified orientation)")
             print()
 
             # Enable arm (auto moves to home position)
@@ -135,7 +149,9 @@ def main():
                     if args.verbose and now - last_print_time[0] >= 0.5:
                         last_print_time[0] = now
                         x_mm, y_mm, z_mm = current_pose.position_mm()
-                        print(f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm")
+                        print(
+                            f"       Position: ({x_mm:.1f}, {y_mm:.1f}, {z_mm:.1f}) mm"
+                        )
 
                 reached = motion.move_cartesian_continuous(
                     x=args.x,
@@ -187,7 +203,7 @@ def main():
 
             # Read final pose
             final_pose = reader.read_end_pose()
-            print(f"\n[INFO] Final end-effector pose:")
+            print("\n[INFO] Final end-effector pose:")
             print(final_pose)
 
             # Safely disable arm (returns to home first)

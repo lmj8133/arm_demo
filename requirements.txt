@@ -1,5 +1,5 @@
 # Piper Robotic Arm Demo Dependencies
-piper_sdk>=1.0.0
+piper_sdk<=0.6.1
 python-can>=3.3.4
 
 # Vision dependencies (ex14)

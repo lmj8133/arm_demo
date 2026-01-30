@@ -34,16 +34,19 @@ def main():
         "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--action", choices=["open", "close", "set", "read"],
-        required=True, help="Gripper action"
+        "--action",
+        choices=["open", "close", "set", "read"],
+        required=True,
+        help="Gripper action",
     )
     parser.add_argument(
-        "--position", type=float, default=40.0,
-        help="Gripper opening in mm (for 'set' action, default: 40)"
+        "--position",
+        type=float,
+        default=40.0,
+        help="Gripper opening in mm (for 'set' action, default: 40)",
     )
     parser.add_argument(
-        "--speed", type=int, default=500,
-        help="Gripper speed 0-1000 (default: 500)"
+        "--speed", type=int, default=500, help="Gripper speed 0-1000 (default: 500)"
     )
     args = parser.parse_args()
 

@@ -69,7 +69,9 @@ def main():
         elif args.axis == "z":
             target_z += args.offset
 
-        print(f"\n[2] Target pose (offset {args.axis.upper()} by {args.offset:+.3f} m):")
+        print(
+            f"\n[2] Target pose (offset {args.axis.upper()} by {args.offset:+.3f} m):"
+        )
         print(f"    X = {target_x:.6f} m ({target_x * 1000:.3f} mm)")
         print(f"    Y = {target_y:.6f} m ({target_y * 1000:.3f} mm)")
         print(f"    Z = {target_z:.6f} m ({target_z * 1000:.3f} mm)")
@@ -82,7 +84,7 @@ def main():
         pitch_001deg = int(target_pitch * 180 / 3.14159265 * 1000)
         yaw_001deg = int(target_yaw * 180 / 3.14159265 * 1000)
 
-        print(f"\n[3] SDK units (0.001mm / 0.001deg):")
+        print("\n[3] SDK units (0.001mm / 0.001deg):")
         print(f"    X = {x_001mm}")
         print(f"    Y = {y_001mm}")
         print(f"    Z = {z_001mm}")
@@ -98,7 +100,7 @@ def main():
         # Read pose after enable (arm returns to home)
         time.sleep(1.0)
         home_pose = reader.read_end_pose()
-        print(f"\n[5] Pose after enable (home position):")
+        print("\n[5] Pose after enable (home position):")
         print(f"    X = {home_pose.x:.6f} m ({home_pose.x * 1000:.3f} mm)")
         print(f"    Y = {home_pose.y:.6f} m ({home_pose.y * 1000:.3f} mm)")
         print(f"    Z = {home_pose.z:.6f} m ({home_pose.z * 1000:.3f} mm)")
@@ -128,7 +130,7 @@ def main():
         pitch_001deg = int(target_pitch * 180 / 3.14159265 * 1000)
         yaw_001deg = int(target_yaw * 180 / 3.14159265 * 1000)
 
-        print(f"\n[6] Recalculated target from home (SDK units):")
+        print("\n[6] Recalculated target from home (SDK units):")
         print(f"    X = {x_001mm} (target: {target_x * 1000:.3f} mm)")
         print(f"    Y = {y_001mm} (target: {target_y * 1000:.3f} mm)")
         print(f"    Z = {z_001mm} (target: {target_z * 1000:.3f} mm)")
@@ -136,8 +138,10 @@ def main():
         # Send motion commands
         print(f"\n[7] Sending motion commands for {args.duration}s...")
         print(f"    MotionCtrl_2(0x01, 0x00, {args.speed}, 0x00)")
-        print(f"    EndPoseCtrl({x_001mm}, {y_001mm}, {z_001mm}, "
-              f"{roll_001deg}, {pitch_001deg}, {yaw_001deg})")
+        print(
+            f"    EndPoseCtrl({x_001mm}, {y_001mm}, {z_001mm}, "
+            f"{roll_001deg}, {pitch_001deg}, {yaw_001deg})"
+        )
 
         start_time = time.time()
         sample_count = 0
@@ -146,8 +150,7 @@ def main():
             # Send motion command
             piper.MotionCtrl_2(0x01, 0x00, args.speed, 0x00)
             piper.EndPoseCtrl(
-                x_001mm, y_001mm, z_001mm,
-                roll_001deg, pitch_001deg, yaw_001deg
+                x_001mm, y_001mm, z_001mm, roll_001deg, pitch_001deg, yaw_001deg
             )
 
             # Print progress every 0.5s
@@ -158,8 +161,7 @@ def main():
                 dy = (current.y - home_pose.y) * 1000
                 dz = (current.z - home_pose.z) * 1000
                 print(
-                    f"    [{elapsed:.1f}s] "
-                    f"dX={dx:+.1f}mm dY={dy:+.1f}mm dZ={dz:+.1f}mm"
+                    f"    [{elapsed:.1f}s] dX={dx:+.1f}mm dY={dy:+.1f}mm dZ={dz:+.1f}mm"
                 )
 
             sample_count += 1
@@ -167,12 +169,12 @@ def main():
 
         # Final pose
         final_pose = reader.read_end_pose()
-        print(f"\n[8] Final pose:")
+        print("\n[8] Final pose:")
         print(f"    X = {final_pose.x:.6f} m ({final_pose.x * 1000:.3f} mm)")
         print(f"    Y = {final_pose.y:.6f} m ({final_pose.y * 1000:.3f} mm)")
         print(f"    Z = {final_pose.z:.6f} m ({final_pose.z * 1000:.3f} mm)")
 
-        print(f"\n[9] Movement summary:")
+        print("\n[9] Movement summary:")
         dx = (final_pose.x - home_pose.x) * 1000
         dy = (final_pose.y - home_pose.y) * 1000
         dz = (final_pose.z - home_pose.z) * 1000
@@ -194,7 +196,9 @@ def main():
         if abs(actual) < 1.0:
             print(f"\n    [FAIL] {args.axis.upper()} axis did NOT move!")
         elif abs(actual - expected) > 10:
-            print(f"\n    [WARN] Movement differs from expected by {abs(actual - expected):.1f} mm")
+            print(
+                f"\n    [WARN] Movement differs from expected by {abs(actual - expected):.1f} mm"
+            )
         else:
             print(f"\n    [OK] {args.axis.upper()} axis moved as expected")
 

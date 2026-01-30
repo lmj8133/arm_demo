@@ -28,6 +28,16 @@ from .coordinate_mapping import (
     AxisBounds,
 )
 from .vision_arm_controller import VisionArmController, MoveResult
+from .profiler import (
+    PipelineProfiler,
+    get_profiler,
+    set_profiler,
+    STAGE_CAPTURE,
+    STAGE_HSV,
+    STAGE_IK,
+    STAGE_MOTION,
+    STAGE_TOTAL,
+)
 
 __all__ = [
     "PiperConnection",
@@ -57,6 +67,15 @@ __all__ = [
     # Vision arm controller
     "VisionArmController",
     "MoveResult",
+    # Profiler
+    "PipelineProfiler",
+    "get_profiler",
+    "set_profiler",
+    "STAGE_CAPTURE",
+    "STAGE_HSV",
+    "STAGE_IK",
+    "STAGE_MOTION",
+    "STAGE_TOTAL",
 ]
 
 __version__ = "0.1.0"

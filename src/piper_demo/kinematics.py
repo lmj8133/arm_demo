@@ -14,21 +14,22 @@ Matrix4 = List[List[float]]
 @dataclass
 class DHParams:
     """Modified DH parameters for a single joint."""
+
     alpha: float  # Link twist (rad)
-    a: float      # Link length (m)
-    d: float      # Link offset (m)
+    a: float  # Link length (m)
+    d: float  # Link offset (m)
     theta_offset: float  # Joint angle offset (rad)
 
 
 # Piper arm Modified DH parameters
 # Reference: https://www.hackster.io/agilexrobotics/jacobian-magic-piper-arm-kinematics-unleashed-0d2f86
 PIPER_DH_PARAMS: List[DHParams] = [
-    DHParams(alpha=0,           a=0,         d=0.123,   theta_offset=0),
-    DHParams(alpha=-math.pi/2,  a=0,         d=0,       theta_offset=math.radians(-172.22)),
-    DHParams(alpha=0,           a=0.28503,   d=0,       theta_offset=math.radians(-102.78)),
-    DHParams(alpha=math.pi/2,   a=-0.021984, d=0.25075, theta_offset=0),
-    DHParams(alpha=-math.pi/2,  a=0,         d=0,       theta_offset=0),
-    DHParams(alpha=math.pi/2,   a=0,         d=0.091,   theta_offset=0),
+    DHParams(alpha=0, a=0, d=0.123, theta_offset=0),
+    DHParams(alpha=-math.pi / 2, a=0, d=0, theta_offset=math.radians(-172.22)),
+    DHParams(alpha=0, a=0.28503, d=0, theta_offset=math.radians(-102.78)),
+    DHParams(alpha=math.pi / 2, a=-0.021984, d=0.25075, theta_offset=0),
+    DHParams(alpha=-math.pi / 2, a=0, d=0, theta_offset=0),
+    DHParams(alpha=math.pi / 2, a=0, d=0.091, theta_offset=0),
 ]
 
 
@@ -61,10 +62,10 @@ def _dh_transform_modified(alpha: float, a: float, d: float, theta: float) -> Ma
     ct, st = math.cos(theta), math.sin(theta)
 
     return [
-        [ct,       -st,       0.0,    a],
-        [st*ca,    ct*ca,    -sa,    -sa*d],
-        [st*sa,    ct*sa,     ca,     ca*d],
-        [0.0,      0.0,       0.0,    1.0]
+        [ct, -st, 0.0, a],
+        [st * ca, ct * ca, -sa, -sa * d],
+        [st * sa, ct * sa, ca, ca * d],
+        [0.0, 0.0, 0.0, 1.0],
     ]
 
 
@@ -91,12 +92,13 @@ def _rotation_to_euler_zyx(T: Matrix4) -> Tuple[float, float, float]:
 @dataclass
 class FKResult:
     """Forward kinematics result."""
-    x: float      # Position X (meters)
-    y: float      # Position Y (meters)
-    z: float      # Position Z (meters)
-    roll: float   # Orientation roll (radians)
+
+    x: float  # Position X (meters)
+    y: float  # Position Y (meters)
+    z: float  # Position Z (meters)
+    roll: float  # Orientation roll (radians)
     pitch: float  # Orientation pitch (radians)
-    yaw: float    # Orientation yaw (radians)
+    yaw: float  # Orientation yaw (radians)
 
     def position_mm(self) -> Tuple[float, float, float]:
         """Get position in millimeters."""

@@ -42,19 +42,27 @@ from inverse_kinematics import inverse_kinematics, IKConfig
 from utils import deg_to_rad, rad_to_deg
 
 
-def print_pose(label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float):
+def print_pose(
+    label: str, x: float, y: float, z: float, roll: float, pitch: float, yaw: float
+):
     """Print pose in a formatted way."""
     print(f"{label}:")
-    print(f"  Position:    X={x*1000:8.2f} mm, Y={y*1000:8.2f} mm, Z={z*1000:8.2f} mm")
-    print(f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°")
+    print(
+        f"  Position:    X={x * 1000:8.2f} mm, Y={y * 1000:8.2f} mm, Z={z * 1000:8.2f} mm"
+    )
+    print(
+        f"  Orientation: R={rad_to_deg(roll):8.2f}°, P={rad_to_deg(pitch):8.2f}°, Y={rad_to_deg(yaw):8.2f}°"
+    )
 
 
 def print_joints(label: str, angles_rad: list):
     """Print joint angles."""
     print(f"{label}:")
     angles_deg = [rad_to_deg(a) for a in angles_rad]
-    print(f"  [{angles_deg[0]:7.2f}°, {angles_deg[1]:7.2f}°, {angles_deg[2]:7.2f}°, "
-          f"{angles_deg[3]:7.2f}°, {angles_deg[4]:7.2f}°, {angles_deg[5]:7.2f}°]")
+    print(
+        f"  [{angles_deg[0]:7.2f}°, {angles_deg[1]:7.2f}°, {angles_deg[2]:7.2f}°, "
+        f"{angles_deg[3]:7.2f}°, {angles_deg[4]:7.2f}°, {angles_deg[5]:7.2f}°]"
+    )
 
 
 def main():
@@ -62,54 +70,53 @@ def main():
         description="Move Piper arm to position relative to home (offset in mm)"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     # Position offset arguments (required)
     parser.add_argument(
-        "--x", type=float, required=True,
-        help="X offset from home in mm"
+        "--x", type=float, required=True, help="X offset from home in mm"
     )
     parser.add_argument(
-        "--y", type=float, required=True,
-        help="Y offset from home in mm"
+        "--y", type=float, required=True, help="Y offset from home in mm"
     )
     parser.add_argument(
-        "--z", type=float, required=True,
-        help="Z offset from home in mm"
+        "--z", type=float, required=True, help="Z offset from home in mm"
     )
     # Orientation arguments (optional, default to home orientation)
     parser.add_argument(
-        "--roll", type=float, default=None,
-        help="Override roll angle in degrees (default: use home orientation)"
+        "--roll",
+        type=float,
+        default=None,
+        help="Override roll angle in degrees (default: use home orientation)",
     )
     parser.add_argument(
-        "--pitch", type=float, default=None,
-        help="Override pitch angle in degrees (default: use home orientation)"
+        "--pitch",
+        type=float,
+        default=None,
+        help="Override pitch angle in degrees (default: use home orientation)",
     )
     parser.add_argument(
-        "--yaw", type=float, default=None,
-        help="Override yaw angle in degrees (default: use home orientation)"
+        "--yaw",
+        type=float,
+        default=None,
+        help="Override yaw angle in degrees (default: use home orientation)",
     )
     parser.add_argument(
-        "--keep-orientation", action="store_true",
-        help="Keep current orientation instead of using home orientation"
+        "--keep-orientation",
+        action="store_true",
+        help="Keep current orientation instead of using home orientation",
     )
     parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Speed factor 0.0-1.0 (default: 0.3)"
+        "--speed", type=float, default=0.3, help="Speed factor 0.0-1.0 (default: 0.3)"
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
-        help="Compute IK only, don't move the arm"
+        "--dry-run", action="store_true", help="Compute IK only, don't move the arm"
     )
     parser.add_argument(
-        "--max-iter", type=int, default=100,
-        help="Maximum IK iterations (default: 100)"
+        "--max-iter", type=int, default=100, help="Maximum IK iterations (default: 100)"
     )
     parser.add_argument(
-        "--damping", type=float, default=0.05,
-        help="IK damping factor (default: 0.05)"
+        "--damping", type=float, default=0.05, help="IK damping factor (default: 0.05)"
     )
     args = parser.parse_args()
 
@@ -145,8 +152,15 @@ def main():
             current_pose = reader.read_end_pose()
 
             print()
-            print_pose("Current Pose", current_pose.x, current_pose.y, current_pose.z,
-                      current_pose.roll, current_pose.pitch, current_pose.yaw)
+            print_pose(
+                "Current Pose",
+                current_pose.x,
+                current_pose.y,
+                current_pose.z,
+                current_pose.roll,
+                current_pose.pitch,
+                current_pose.yaw,
+            )
             print()
             print_joints("Current Joints", current_joints)
 
@@ -155,8 +169,15 @@ def main():
             home_fk = forward_kinematics(home_joints)
 
             print()
-            print_pose("Home Position (FK)", home_fk.x, home_fk.y, home_fk.z,
-                      home_fk.roll, home_fk.pitch, home_fk.yaw)
+            print_pose(
+                "Home Position (FK)",
+                home_fk.x,
+                home_fk.y,
+                home_fk.z,
+                home_fk.roll,
+                home_fk.pitch,
+                home_fk.yaw,
+            )
 
             # Calculate target position: home + offset
             target_x = home_fk.x + offset_x
@@ -164,7 +185,7 @@ def main():
             target_z = home_fk.z + offset_z
 
             print()
-            print(f"Offset from Home:")
+            print("Offset from Home:")
             print(f"  dX={args.x:+8.2f} mm, dY={args.y:+8.2f} mm, dZ={args.z:+8.2f} mm")
 
             # Determine target orientation
@@ -172,18 +193,36 @@ def main():
             # --keep-orientation: use current pose orientation
             # --roll/--pitch/--yaw: explicit override
             if args.keep_orientation:
-                base_roll, base_pitch, base_yaw = current_pose.roll, current_pose.pitch, current_pose.yaw
+                base_roll, base_pitch, base_yaw = (
+                    current_pose.roll,
+                    current_pose.pitch,
+                    current_pose.yaw,
+                )
                 orientation_source = "current"
             else:
-                base_roll, base_pitch, base_yaw = home_fk.roll, home_fk.pitch, home_fk.yaw
+                base_roll, base_pitch, base_yaw = (
+                    home_fk.roll,
+                    home_fk.pitch,
+                    home_fk.yaw,
+                )
                 orientation_source = "home"
 
             target_roll = deg_to_rad(args.roll) if args.roll is not None else base_roll
-            target_pitch = deg_to_rad(args.pitch) if args.pitch is not None else base_pitch
+            target_pitch = (
+                deg_to_rad(args.pitch) if args.pitch is not None else base_pitch
+            )
             target_yaw = deg_to_rad(args.yaw) if args.yaw is not None else base_yaw
 
             print()
-            print_pose("Target Pose", target_x, target_y, target_z, target_roll, target_pitch, target_yaw)
+            print_pose(
+                "Target Pose",
+                target_x,
+                target_y,
+                target_z,
+                target_roll,
+                target_pitch,
+                target_yaw,
+            )
 
             # Show orientation source and any explicit overrides
             overrides = []
@@ -194,7 +233,9 @@ def main():
             if args.yaw is not None:
                 overrides.append(f"yaw={args.yaw}°")
             if overrides:
-                print(f"  (Orientation: base={orientation_source}, overrides: {', '.join(overrides)})")
+                print(
+                    f"  (Orientation: base={orientation_source}, overrides: {', '.join(overrides)})"
+                )
             else:
                 print(f"  (Orientation: using {orientation_source})")
 
@@ -212,18 +253,24 @@ def main():
 
             # Use home_joints as initial guess (target is relative to home)
             result = inverse_kinematics(
-                target_x, target_y, target_z,
-                target_roll, target_pitch, target_yaw,
+                target_x,
+                target_y,
+                target_z,
+                target_roll,
+                target_pitch,
+                target_yaw,
                 initial_guess=home_joints,
-                config=config
+                config=config,
             )
 
             if result.converged:
                 print(f"[OK] IK converged in {result.iterations} iterations")
             else:
-                print(f"[WARNING] IK did not converge after {result.iterations} iterations")
+                print(
+                    f"[WARNING] IK did not converge after {result.iterations} iterations"
+                )
 
-            print(f"  Position error:    {result.position_error*1000:.4f} mm")
+            print(f"  Position error:    {result.position_error * 1000:.4f} mm")
             print(f"  Orientation error: {rad_to_deg(result.orientation_error):.4f}°")
             print()
             print_joints("IK Solution", result.joint_angles)
@@ -231,15 +278,19 @@ def main():
             # Verify with FK
             fk = forward_kinematics(result.joint_angles)
             print()
-            print_pose("Expected Pose (FK)", fk.x, fk.y, fk.z, fk.roll, fk.pitch, fk.yaw)
+            print_pose(
+                "Expected Pose (FK)", fk.x, fk.y, fk.z, fk.roll, fk.pitch, fk.yaw
+            )
 
             # Check if IK solution is acceptable
             if result.position_error > 0.001:  # > 1mm
                 print()
-                print(f"[WARNING] Position error {result.position_error*1000:.2f}mm exceeds 1mm threshold")
+                print(
+                    f"[WARNING] Position error {result.position_error * 1000:.2f}mm exceeds 1mm threshold"
+                )
                 if not args.dry_run:
                     response = input("Continue anyway? [y/N]: ")
-                    if response.lower() != 'y':
+                    if response.lower() != "y":
                         print("Aborted.")
                         return 1
 
@@ -285,19 +336,26 @@ def main():
                 final_joints = reader.read_joints()
 
                 print()
-                print_pose("Final Pose", final_pose.x, final_pose.y, final_pose.z,
-                          final_pose.roll, final_pose.pitch, final_pose.yaw)
+                print_pose(
+                    "Final Pose",
+                    final_pose.x,
+                    final_pose.y,
+                    final_pose.z,
+                    final_pose.roll,
+                    final_pose.pitch,
+                    final_pose.yaw,
+                )
                 print()
                 print_joints("Final Joints", final_joints.positions)
 
                 # Calculate final error
                 final_pos_err = math.sqrt(
-                    (final_pose.x - target_x)**2 +
-                    (final_pose.y - target_y)**2 +
-                    (final_pose.z - target_z)**2
+                    (final_pose.x - target_x) ** 2
+                    + (final_pose.y - target_y) ** 2
+                    + (final_pose.z - target_z) ** 2
                 )
                 print()
-                print(f"Final position error: {final_pos_err*1000:.2f} mm")
+                print(f"Final position error: {final_pos_err * 1000:.2f} mm")
 
                 # Hold position briefly then safe disable
                 print()

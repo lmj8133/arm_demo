@@ -38,9 +38,7 @@ class ColorTarget:
         """Get center point (cx, cy) in pixels."""
         return (self.cx, self.cy)
 
-    def normalized_center(
-        self, img_width: int, img_height: int
-    ) -> Tuple[float, float]:
+    def normalized_center(self, img_width: int, img_height: int) -> Tuple[float, float]:
         """Get center normalized to 0-1 range.
 
         Args:
@@ -59,8 +57,7 @@ class ColorTarget:
 
     def __repr__(self) -> str:
         return (
-            f"ColorTarget(center=({self.cx:.0f}, {self.cy:.0f}), "
-            f"area={self.area:.0f})"
+            f"ColorTarget(center=({self.cx:.0f}, {self.cy:.0f}), area={self.area:.0f})"
         )
 
 
@@ -91,8 +88,8 @@ class ColorTracker:
     # Red wraps around hue 0/180, so we need two ranges
     PRESETS: Dict[str, HSVRange] = {
         "red": [
-            ((0, 100, 100), (10, 255, 255)),      # Low red
-            ((160, 100, 100), (180, 255, 255)),   # High red
+            ((0, 100, 100), (10, 255, 255)),  # Low red
+            ((160, 100, 100), (180, 255, 255)),  # High red
         ],
         "green": [
             ((35, 100, 100), (85, 255, 255)),
@@ -130,9 +127,7 @@ class ColorTracker:
             color_lower = color.lower()
             if color_lower not in self.PRESETS:
                 valid = ", ".join(self.PRESETS.keys())
-                raise ValueError(
-                    f"Unknown color '{color}'. Valid options: {valid}"
-                )
+                raise ValueError(f"Unknown color '{color}'. Valid options: {valid}")
             self.hsv_ranges: HSVRange = self.PRESETS[color_lower]
             self.color_name = color_lower
         else:
@@ -155,9 +150,7 @@ class ColorTracker:
         color_lower = color.lower()
         if color_lower not in self.PRESETS:
             valid = ", ".join(self.PRESETS.keys())
-            raise ValueError(
-                f"Unknown color '{color}'. Valid options: {valid}"
-            )
+            raise ValueError(f"Unknown color '{color}'. Valid options: {valid}")
         self.hsv_ranges = self.PRESETS[color_lower]
         self.color_name = color_lower
 
@@ -210,9 +203,7 @@ class ColorTracker:
         mask = self.create_mask(frame)
         return self._find_largest_contour(mask)
 
-    def detect_all(
-        self, frame: np.ndarray, max_count: int = 10
-    ) -> List[ColorTarget]:
+    def detect_all(self, frame: np.ndarray, max_count: int = 10) -> List[ColorTarget]:
         """Detect all color blobs in frame.
 
         Args:
@@ -227,9 +218,7 @@ class ColorTracker:
 
     def _find_largest_contour(self, mask: np.ndarray) -> Optional[ColorTarget]:
         """Find the largest contour in the mask."""
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not contours:
             return None
@@ -242,13 +231,9 @@ class ColorTracker:
         largest = max(valid_contours, key=cv2.contourArea)
         return self._contour_to_target(largest)
 
-    def _find_all_contours(
-        self, mask: np.ndarray, max_count: int
-    ) -> List[ColorTarget]:
+    def _find_all_contours(self, mask: np.ndarray, max_count: int) -> List[ColorTarget]:
         """Find all contours in the mask."""
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if not contours:
             return []
@@ -259,9 +244,9 @@ class ColorTracker:
             return []
 
         # Sort by area descending and limit count
-        sorted_contours = sorted(
-            valid_contours, key=cv2.contourArea, reverse=True
-        )[:max_count]
+        sorted_contours = sorted(valid_contours, key=cv2.contourArea, reverse=True)[
+            :max_count
+        ]
 
         return [self._contour_to_target(c) for c in sorted_contours]
 
@@ -288,7 +273,4 @@ class ColorTracker:
         return list(cls.PRESETS.keys())
 
     def __repr__(self) -> str:
-        return (
-            f"ColorTracker(color={self.color_name}, "
-            f"min_area={self.min_area})"
-        )
+        return f"ColorTracker(color={self.color_name}, min_area={self.min_area})"

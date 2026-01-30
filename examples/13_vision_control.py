@@ -70,12 +70,18 @@ def print_result(result: MoveResult):
         print(f"     Arm position: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
     else:
         if not result.ik_converged:
-            print(f"[ERROR] IK failed (iter={result.ik_iterations}, "
-                  f"pos_err={result.position_error*1000:.2f}mm)")
+            print(
+                f"[ERROR] IK failed (iter={result.ik_iterations}, "
+                f"pos_err={result.position_error * 1000:.2f}mm)"
+            )
         elif result.near_singularity:
-            print(f"[ERROR] Near singularity at camera ({result.y_cam:.2f}, {result.z_cam:.2f})")
+            print(
+                f"[ERROR] Near singularity at camera ({result.y_cam:.2f}, {result.z_cam:.2f})"
+            )
         elif not result.motion_completed:
-            print(f"[WARNING] Motion timeout at camera ({result.y_cam:.2f}, {result.z_cam:.2f})")
+            print(
+                f"[WARNING] Motion timeout at camera ({result.y_cam:.2f}, {result.z_cam:.2f})"
+            )
 
 
 def print_status(controller: VisionArmController, speed: float):
@@ -87,59 +93,65 @@ def print_status(controller: VisionArmController, speed: float):
     y_cam, z_cam = controller.get_current_camera_coords()
 
     print()
-    print(f"Arm Position (REP-103: X=front, Y=left, Z=up):")
-    print(f"  X={pose.x*1000:.1f}, Y={pose.y*1000:.1f}, Z={pose.z*1000:.1f} mm")
-    print(f"Camera Coordinates (normalized):")
+    print("Arm Position (REP-103: X=front, Y=left, Z=up):")
+    print(f"  X={pose.x * 1000:.1f}, Y={pose.y * 1000:.1f}, Z={pose.z * 1000:.1f} mm")
+    print("Camera Coordinates (normalized):")
     print(f"  Y={y_cam:.3f}, Z={z_cam:.3f}")
     print(f"Speed: {speed}")
     print()
 
     # Print workspace bounds (REP-103 convention)
     ws = controller.config.workspace
-    print(f"Workspace bounds (REP-103):")
-    print(f"  X (front/back): {ws.x_arm.min*1000:.0f} to {ws.x_arm.max*1000:.0f} mm")
-    print(f"  Y (left/right): {ws.y_arm.min*1000:.0f} to {ws.y_arm.max*1000:.0f} mm")
-    print(f"  Z (height):     {ws.z_arm.min*1000:.0f} to {ws.z_arm.max*1000:.0f} mm")
+    print("Workspace bounds (REP-103):")
+    print(
+        f"  X (front/back): {ws.x_arm.min * 1000:.0f} to {ws.x_arm.max * 1000:.0f} mm"
+    )
+    print(
+        f"  Y (left/right): {ws.y_arm.min * 1000:.0f} to {ws.y_arm.max * 1000:.0f} mm"
+    )
+    print(
+        f"  Z (height):     {ws.z_arm.min * 1000:.0f} to {ws.z_arm.max * 1000:.0f} mm"
+    )
 
 
 def parse_command(line: str) -> Tuple[str, list]:
     """Parse user input command."""
     line = line.strip()
     if not line:
-        return ('empty', [])
+        return ("empty", [])
 
     parts = line.split()
     cmd = parts[0].lower()
 
-    if cmd == 'center':
-        return ('move', [0.5, 0.5])
-    elif cmd == 'corners':
-        return ('corners', [])
-    elif cmd == 'scan':
+    if cmd == "center":
+        return ("move", [0.5, 0.5])
+    elif cmd == "corners":
+        return ("corners", [])
+    elif cmd == "scan":
         grid_size = 3
         if len(parts) > 1:
             try:
                 grid_size = int(parts[1])
                 grid_size = max(2, min(5, grid_size))
             except ValueError:
-                return ('error', ['Invalid grid size'])
-        return ('scan', [grid_size])
-    elif cmd == 'status':
-        return ('status', [])
-    elif cmd == 'speed':
+                return ("error", ["Invalid grid size"])
+        return ("scan", [grid_size])
+    elif cmd == "status":
+        return ("status", [])
+    elif cmd == "speed":
         if len(parts) < 2:
-            return ('error', ['Speed command requires a value (0.1-1.0)'])
+            return ("error", ["Speed command requires a value (0.1-1.0)"])
         try:
             val = float(parts[1])
             if val < 0.1 or val > 1.0:
-                return ('error', ['Speed must be between 0.1 and 1.0'])
-            return ('speed', [val])
+                return ("error", ["Speed must be between 0.1 and 1.0"])
+            return ("speed", [val])
         except ValueError:
-            return ('error', [f'Invalid speed value: {parts[1]}'])
-    elif cmd == 'disable':
-        return ('disable', [])
-    elif cmd == 'help':
-        return ('help', [])
+            return ("error", [f"Invalid speed value: {parts[1]}"])
+    elif cmd == "disable":
+        return ("disable", [])
+    elif cmd == "help":
+        return ("help", [])
 
     # Try to parse as y z coordinates
     if len(parts) == 2:
@@ -147,29 +159,27 @@ def parse_command(line: str) -> Tuple[str, list]:
             y = float(parts[0])
             z = float(parts[1])
             if not (0 <= y <= 1 and 0 <= z <= 1):
-                return ('error', ['Coordinates must be in range 0-1'])
-            return ('move', [y, z])
+                return ("error", ["Coordinates must be in range 0-1"])
+            return ("move", [y, z])
         except ValueError:
-            return ('error', [f'Invalid coordinates: {line}'])
+            return ("error", [f"Invalid coordinates: {line}"])
 
-    return ('error', [f'Unknown command: {line}'])
+    return ("error", [f"Unknown command: {line}"])
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Vision-guided arm control demo"
+    parser = argparse.ArgumentParser(description="Vision-guided arm control demo")
+    parser.add_argument(
+        "--can", default="can0", help="CAN interface name (default: can0)"
     )
     parser.add_argument(
-        "--can", default="can0",
-        help="CAN interface name (default: can0)"
+        "--config", default=None, help="Path to YAML configuration file"
     )
     parser.add_argument(
-        "--config", default=None,
-        help="Path to YAML configuration file"
-    )
-    parser.add_argument(
-        "--speed", type=float, default=0.3,
-        help="Initial speed factor 0.1-1.0 (default: 0.3)"
+        "--speed",
+        type=float,
+        default=0.3,
+        help="Initial speed factor 0.1-1.0 (default: 0.3)",
     )
     args = parser.parse_args()
 
@@ -197,9 +207,7 @@ def main():
             # Create controller
             if args.config:
                 print(f"[INFO] Loading config from {args.config}")
-                controller = VisionArmController.from_yaml(
-                    args.config, reader, motion
-                )
+                controller = VisionArmController.from_yaml(args.config, reader, motion)
             else:
                 # Auto-compute workspace from HOME_POSITION FK
                 print("[INFO] Computing workspace from HOME_POSITION...")
@@ -210,10 +218,18 @@ def main():
                 ws = controller.config.workspace
                 x_mm, y_mm, z_mm = home_fk.position_mm()
                 print(f"[INFO] HOME FK: X={x_mm:.1f}, Y={y_mm:.1f}, Z={z_mm:.1f} mm")
-                print(f"[INFO] Workspace X: {ws.x_arm.min*1000:.0f} ~ {ws.x_arm.max*1000:.0f} mm")
-                print(f"[INFO] Workspace Y: {ws.y_arm.min*1000:.0f} ~ {ws.y_arm.max*1000:.0f} mm")
-                print(f"[INFO] Workspace Z: {ws.z_arm.min*1000:.0f} ~ {ws.z_arm.max*1000:.0f} mm")
-                print(f"[INFO] Singularity threshold: {controller.config.motion.singularity_threshold:.2e}")
+                print(
+                    f"[INFO] Workspace X: {ws.x_arm.min * 1000:.0f} ~ {ws.x_arm.max * 1000:.0f} mm"
+                )
+                print(
+                    f"[INFO] Workspace Y: {ws.y_arm.min * 1000:.0f} ~ {ws.y_arm.max * 1000:.0f} mm"
+                )
+                print(
+                    f"[INFO] Workspace Z: {ws.z_arm.min * 1000:.0f} ~ {ws.z_arm.max * 1000:.0f} mm"
+                )
+                print(
+                    f"[INFO] Singularity threshold: {controller.config.motion.singularity_threshold:.2e}"
+                )
 
             print("[OK] Ready!")
             print_help()
@@ -236,45 +252,47 @@ def main():
 
                 cmd, cmd_args = parse_command(line)
 
-                if cmd == 'empty':
+                if cmd == "empty":
                     continue
 
-                elif cmd == 'error':
+                elif cmd == "error":
                     print(f"[ERROR] {cmd_args[0]}")
 
-                elif cmd == 'help':
+                elif cmd == "help":
                     print_help()
 
-                elif cmd == 'status':
+                elif cmd == "status":
                     print_status(controller, speed)
 
-                elif cmd == 'speed':
+                elif cmd == "speed":
                     speed = cmd_args[0]
                     print(f"[OK] Speed set to {speed}")
 
-                elif cmd == 'move':
+                elif cmd == "move":
                     y_cam, z_cam = cmd_args
                     print(f"[INFO] Moving to camera ({y_cam:.2f}, {z_cam:.2f})...")
                     result = controller.move_to_normalized(
-                        y_cam, z_cam,
+                        y_cam,
+                        z_cam,
                         speed_factor=speed,
                     )
                     print_result(result)
 
-                elif cmd == 'corners':
+                elif cmd == "corners":
                     corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
                     print("[INFO] Visiting corners...")
                     for i, (y, z) in enumerate(corners):
-                        print(f"[{i+1}/4] Moving to ({y:.1f}, {z:.1f})...")
+                        print(f"[{i + 1}/4] Moving to ({y:.1f}, {z:.1f})...")
                         result = controller.move_to_normalized(
-                            y, z,
+                            y,
+                            z,
                             speed_factor=speed,
                         )
                         print_result(result)
                         if result.motion_completed:
                             time.sleep(0.5)
 
-                elif cmd == 'scan':
+                elif cmd == "scan":
                     grid_size = cmd_args[0]
                     print(f"[INFO] Scanning {grid_size}×{grid_size} grid...")
                     results = controller.scan_workspace(
@@ -283,9 +301,11 @@ def main():
                         dwell_sec=0.3,
                     )
                     success = sum(1 for r in results if r.motion_completed)
-                    print(f"[OK] Scan complete: {success}/{len(results)} positions reached")
+                    print(
+                        f"[OK] Scan complete: {success}/{len(results)} positions reached"
+                    )
 
-                elif cmd == 'disable':
+                elif cmd == "disable":
                     print("[INFO] Returning to safe home...")
                     print("[INFO] Disabling arm...")
                     conn.safe_disable(return_home=True, home_speed=20)
@@ -303,6 +323,7 @@ def main():
     except Exception as e:
         print(f"[ERROR] {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

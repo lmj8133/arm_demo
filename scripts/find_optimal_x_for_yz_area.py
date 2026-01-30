@@ -129,8 +129,12 @@ def compute_yz_reachable_area(
             z = z_min + (z_max - z_min) * j / (yz_samples - 1)
 
             result = inverse_kinematics(
-                x_fixed, y, z,
-                roll, pitch, yaw,
+                x_fixed,
+                y,
+                z,
+                roll,
+                pitch,
+                yaw,
                 initial_guess=initial_guess,
                 config=ik_config,
             )
@@ -265,10 +269,16 @@ def main():
         z_range = (home_fk.z - args.z_range_below, home_fk.z + args.z_range_above)
 
     print("Search parameters:")
-    print(f"  X (front/back) range: {x_min*1000:.0f} ~ {x_max*1000:.0f} mm ({args.x_steps} steps)")
-    print(f"  Y (left/right) range: {y_range[0]*1000:.0f} ~ {y_range[1]*1000:.0f} mm")
-    print(f"  Z (height) range: {z_range[0]*1000:.0f} ~ {z_range[1]*1000:.0f} mm")
-    print(f"  YZ grid: {args.yz_samples}x{args.yz_samples} = {args.yz_samples**2} samples per X")
+    print(
+        f"  X (front/back) range: {x_min * 1000:.0f} ~ {x_max * 1000:.0f} mm ({args.x_steps} steps)"
+    )
+    print(
+        f"  Y (left/right) range: {y_range[0] * 1000:.0f} ~ {y_range[1] * 1000:.0f} mm"
+    )
+    print(f"  Z (height) range: {z_range[0] * 1000:.0f} ~ {z_range[1] * 1000:.0f} mm")
+    print(
+        f"  YZ grid: {args.yz_samples}x{args.yz_samples} = {args.yz_samples**2} samples per X"
+    )
     print()
 
     # IK configuration
@@ -293,7 +303,11 @@ def main():
     print("-" * 60)
 
     for i in range(args.x_steps):
-        x = x_min + (x_max - x_min) * i / (args.x_steps - 1) if args.x_steps > 1 else x_min
+        x = (
+            x_min + (x_max - x_min) * i / (args.x_steps - 1)
+            if args.x_steps > 1
+            else x_min
+        )
 
         area, points, y_reach, z_reach = compute_yz_reachable_area(
             x_fixed=x,
@@ -319,11 +333,17 @@ def main():
             best_z_reachable = z_reach
             marker = " <- Best"
 
-        print(f"X={x*1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}")
+        print(
+            f"X={x * 1000:6.1f}mm -> Area={area_cm2:6.1f} cm² ({len(points):3d} pts){marker}"
+        )
 
         if args.verbose and points:
-            print(f"             Y: [{y_reach[0]*1000:.0f}, {y_reach[1]*1000:.0f}] mm")
-            print(f"             Z: [{z_reach[0]*1000:.0f}, {z_reach[1]*1000:.0f}] mm")
+            print(
+                f"             Y: [{y_reach[0] * 1000:.0f}, {y_reach[1] * 1000:.0f}] mm"
+            )
+            print(
+                f"             Z: [{z_reach[0] * 1000:.0f}, {z_reach[1] * 1000:.0f}] mm"
+            )
 
     print("-" * 60)
     print()
@@ -336,20 +356,28 @@ def main():
         print("=" * 60)
         print("RESULT")
         print("=" * 60)
-        print(f"Optimal X (front/back): {best_x*1000:.1f} mm ({best_x:.5f} m)")
-        print(f"Reachable YZ area: {best_area*10000:.1f} cm²")
+        print(f"Optimal X (front/back): {best_x * 1000:.1f} mm ({best_x:.5f} m)")
+        print(f"Reachable YZ area: {best_area * 10000:.1f} cm²")
         print(f"IK-solvable points: {best_count}/{args.yz_samples**2}")
         print()
-        print(f"Reachable Y range: [{best_y_reachable[0]*1000:.1f}, {best_y_reachable[1]*1000:.1f}] mm")
-        print(f"Reachable Z range: [{best_z_reachable[0]*1000:.1f}, {best_z_reachable[1]*1000:.1f}] mm")
-        print(f"Z center (reachable): {z_center*1000:.1f} mm")
+        print(
+            f"Reachable Y range: [{best_y_reachable[0] * 1000:.1f}, {best_y_reachable[1] * 1000:.1f}] mm"
+        )
+        print(
+            f"Reachable Z range: [{best_z_reachable[0] * 1000:.1f}, {best_z_reachable[1] * 1000:.1f}] mm"
+        )
+        print(f"Z center (reachable): {z_center * 1000:.1f} mm")
         print()
 
         # Solve IK at center of reachable YZ range for HOME_POSITION
         print("Computing HOME_POSITION at center of reachable YZ range...")
         center_result = inverse_kinematics(
-            best_x, y_center, z_center,
-            roll, pitch, yaw,
+            best_x,
+            y_center,
+            z_center,
+            roll,
+            pitch,
+            yaw,
             initial_guess=list(home_joints),
             config=ik_config,
         )
@@ -363,7 +391,9 @@ def main():
 
             # Verify with FK
             fk_result = forward_kinematics(center_result.joint_angles)
-            print(f"FK verification: X={fk_result.x*1000:.1f}, Y={fk_result.y*1000:.1f}, Z={fk_result.z*1000:.1f} mm")
+            print(
+                f"FK verification: X={fk_result.x * 1000:.1f}, Y={fk_result.y * 1000:.1f}, Z={fk_result.z * 1000:.1f} mm"
+            )
             print()
         else:
             print("[WARN] IK failed at center position, trying nearby points...")
@@ -371,15 +401,21 @@ def main():
             found = False
             for dz in [0.01, -0.01, 0.02, -0.02]:
                 retry_result = inverse_kinematics(
-                    best_x, y_center, z_center + dz,
-                    roll, pitch, yaw,
+                    best_x,
+                    y_center,
+                    z_center + dz,
+                    roll,
+                    pitch,
+                    yaw,
                     initial_guess=list(home_joints),
                     config=ik_config,
                 )
                 if retry_result.converged:
-                    angles_str = ", ".join(f"{a:.5f}" for a in retry_result.joint_angles)
+                    angles_str = ", ".join(
+                        f"{a:.5f}" for a in retry_result.joint_angles
+                    )
                     fk_result = forward_kinematics(retry_result.joint_angles)
-                    print(f"Found solution at Z={fk_result.z*1000:.1f} mm")
+                    print(f"Found solution at Z={fk_result.z * 1000:.1f} mm")
                     print()
                     print("Suggested HOME_POSITION:")
                     print(f"  HOME_POSITION = [{angles_str}]")
@@ -395,8 +431,12 @@ def main():
         print()
 
         # Compare with home position
-        print(f"HOME X: {home_fk.x*1000:.1f} mm, Delta: {(best_x - home_fk.x)*1000:+.1f} mm")
-        print(f"HOME Z: {home_fk.z*1000:.1f} mm, New Z center: {z_center*1000:.1f} mm, Delta: {(z_center - home_fk.z)*1000:+.1f} mm")
+        print(
+            f"HOME X: {home_fk.x * 1000:.1f} mm, Delta: {(best_x - home_fk.x) * 1000:+.1f} mm"
+        )
+        print(
+            f"HOME Z: {home_fk.z * 1000:.1f} mm, New Z center: {z_center * 1000:.1f} mm, Delta: {(z_center - home_fk.z) * 1000:+.1f} mm"
+        )
     else:
         print("[ERROR] No reachable points found in the search range!")
         return 1
