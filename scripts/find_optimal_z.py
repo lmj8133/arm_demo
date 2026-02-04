@@ -26,9 +26,9 @@ sys.path.insert(0, _piper_demo_path)
 from kinematics import forward_kinematics
 from inverse_kinematics import inverse_kinematics, IKConfig
 
-# HOME_POSITION from PiperConnection (copied to avoid piper_sdk dependency)
-# Z=16mm (height), optimized for XY reach
-HOME_POSITION = [1.59868, 0.27609, -0.83856, 0.04926, 0.67869, -0.7526]
+# Drawing pose: pen pointing down (RY ≈ 88°)
+# Position: X=346mm, Y=14mm, Z=130mm
+HOME_POSITION = [0.02070, 2.02836, -0.67533, -0.07916, -1.30194, 0.01630]
 
 
 def convex_hull_area(points: list[tuple[float, float]]) -> float:
