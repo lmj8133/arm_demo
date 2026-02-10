@@ -13,13 +13,13 @@ BAUDRATE="${2:-1000000}"
 echo "[INFO] Activating CAN interface: $CAN_IF with baudrate: $BAUDRATE"
 
 # Bring down the interface first (ignore errors if already down)
-sudo ip link set "$CAN_IF" down 2>/dev/null || true
+ip link set "$CAN_IF" down 2>/dev/null || true
 
 # Set CAN type and bitrate
-sudo ip link set "$CAN_IF" type can bitrate "$BAUDRATE"
+ip link set "$CAN_IF" type can bitrate "$BAUDRATE"
 
 # Bring up the interface
-sudo ip link set "$CAN_IF" up
+ip link set "$CAN_IF" up
 
 # Verify the interface is up
 if ip link show "$CAN_IF" | grep -q "UP"; then
