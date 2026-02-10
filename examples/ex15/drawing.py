@@ -20,9 +20,9 @@ Example:
     ...     reader = JointReader(conn.piper)
     ...     drawer = DrawingController(motion, reader)
     ...
-    ...     drawer.move(False, 0.25, 0.0)   # travel to position
-    ...     drawer.move(True, 0.30, 0.05)   # draw line to target
-    ...     drawer.move(False, 0.25, 0.0)   # lift and travel back
+    ...     drawer.move(False, 0.5, 0.5)   # travel to center
+    ...     drawer.move(True, 0.3, 0.6)   # draw line to target
+    ...     drawer.move(False, 0.5, 0.5)   # lift and travel back
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ IK_CFG = IKConfig(
 )
 
 # Home joint angles for safe shutdown (editable)
-SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.01383]
 
 
 @dataclass
@@ -78,8 +78,8 @@ class DrawingConfig:
     # Workspace limits (safety bounds in meters)
     x_min: float = 0.220
     x_max: float = 0.420
-    y_min: float = -0.161
-    y_max: float = 0.139
+    y_min: float = -0.141
+    y_max: float = 0.119
 
     # Interpolation
     max_step_length: float = 0.002  # Auto-interpolate steps longer than this (m)
@@ -126,16 +126,22 @@ class DrawingController:
         """
         Move to (x, y) with pen state controlled by `write`.
 
+        Accepts normalized coordinates (0-1) and converts to workspace meters.
+        Mapping (inverted on both axes):
+            (0, 0) -> (x_max, y_max)
+            (1, 1) -> (x_min, y_min)
+
         Pure dispatcher — delegates to pen_up/pen_down/_travel_to/_draw_to.
 
         Args:
             write: True to draw (pen down), False to travel (pen up).
-            x: Target X position (m).
-            y: Target Y position (m).
+            x: Normalized X coordinate (0-1).
+            y: Normalized Y coordinate (0-1).
 
         Returns:
             True if move completed successfully.
         """
+        x, y = self._normalized_to_meters(x, y)
         x, y = self._clamp_position(x, y)
 
         if self._writing and not write:
@@ -233,6 +239,25 @@ class DrawingController:
     # -------------------------------------------------------------------------
     # Internal Methods
     # -------------------------------------------------------------------------
+
+    def _normalized_to_meters(self, cx: float, cy: float) -> Tuple[float, float]:
+        """Convert normalized coordinates (0-1) to workspace meters.
+
+        Mapping (inverted on both axes):
+            (0, 0) -> (x_max, y_max)
+            (1, 1) -> (x_min, y_min)
+
+        Args:
+            cx: Normalized X coordinate (0-1).
+            cy: Normalized Y coordinate (0-1).
+
+        Returns:
+            (x, y) in meters within workspace bounds.
+        """
+        cfg = self.config
+        x = cfg.x_max - cx * (cfg.x_max - cfg.x_min)
+        y = cfg.y_max - cy * (cfg.y_max - cfg.y_min)
+        return x, y
 
     def _clamp_position(self, x: float, y: float) -> Tuple[float, float]:
         """Clamp position to workspace limits."""
