@@ -73,13 +73,13 @@ class DrawingConfig:
     # Motion parameters
     draw_speed: float = 0.3   # Speed factor for drawing (0-1)
     move_speed: float = 0.3   # Speed factor for travel moves
-    interval: float = 0.01    # Fire-and-forget sleep interval (s)
+    interval: float = 0.05    # Fire-and-forget sleep interval (s)
 
     # Workspace limits (safety bounds in meters)
     x_min: float = 0.220
     x_max: float = 0.420
-    y_min: float = -0.141
-    y_max: float = 0.119
+    y_min: float = -0.111
+    y_max: float = 0.099
 
     # Interpolation
     max_step_length: float = 0.002  # Auto-interpolate steps longer than this (m)
@@ -131,7 +131,9 @@ class DrawingController:
             (0, 0) -> (x_max, y_max)
             (1, 1) -> (x_min, y_min)
 
-        Pure dispatcher — delegates to pen_up/pen_down/_travel_to/_draw_to.
+        Special case: move(False, 0, 0) is treated as idle (pen up only,
+        no movement). This matches tracker output where (0, 0, 0) means
+        no detection.
 
         Args:
             write: True to draw (pen down), False to travel (pen up).
@@ -141,6 +143,10 @@ class DrawingController:
         Returns:
             True if move completed successfully.
         """
+        # Idle: pen up without moving (tracker sends 0,0,0 when no detection)
+        if not write and x == 0.0 and y == 0.0:
+            return self.pen_up()
+
         x, y = self._normalized_to_meters(x, y)
         x, y = self._clamp_position(x, y)
 
