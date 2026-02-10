@@ -58,6 +58,9 @@ IK_CFG = IKConfig(
     orientation_tolerance=1e-3,
 )
 
+# Home joint angles for safe shutdown (editable)
+SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
 
 @dataclass
 class DrawingConfig:
@@ -70,7 +73,7 @@ class DrawingConfig:
     # Motion parameters
     draw_speed: float = 0.3   # Speed factor for drawing (0-1)
     move_speed: float = 0.3   # Speed factor for travel moves
-    interval: float = 0.05    # Fire-and-forget sleep interval (s)
+    interval: float = 0.01    # Fire-and-forget sleep interval (s)
 
     # Workspace limits (safety bounds in meters)
     x_min: float = 0.220
@@ -200,6 +203,31 @@ class DrawingController:
         return (
             self.config.x_max - self.config.x_min,
             self.config.y_max - self.config.y_min,
+        )
+
+    def safe_disable(self, lift_height: float = 0.10) -> None:
+        """Lift arm vertically and return to home for safe shutdown.
+
+        Sequence:
+            1. Pen up (if writing)
+            2. Raise Z by lift_height (default 10cm)
+            3. Move to SAFE_HOME_JOINTS zero position
+
+        Args:
+            lift_height: Vertical lift distance in meters (default: 0.10).
+        """
+        self.pen_up()
+        lift_z = self.config.safe_z + lift_height
+        self._move_to_xyz(
+            self._x, self._y, lift_z,
+            speed=self.config.move_speed,
+            wait=True,
+        )
+        self.motion.move_joint(SAFE_HOME_JOINTS, speed_factor=self.config.move_speed)
+        self.reader.wait_for_position(
+            SAFE_HOME_JOINTS,
+            tolerance_rad=0.035,
+            timeout_sec=10.0,
         )
 
     # -------------------------------------------------------------------------
