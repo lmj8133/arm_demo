@@ -24,3 +24,9 @@ piper_sdk/
 *.pt
 *.pth
 *.onnx
+
+# Video recordings
+*.avi
+
+# Generated calibration profiles
+laser_profile.json

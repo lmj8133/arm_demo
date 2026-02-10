@@ -28,6 +28,8 @@ Controls:
     r     - Pause tracking (arm finishes queued commands)
     m     - Toggle mask overlay
     +/-   - Adjust brightness threshold
+    t     - Enter/exit interactive HSV calibration mode
+    s     - Quick-save tracker parameters to profile JSON
 """
 
 import argparse
@@ -46,7 +48,14 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ex15"))
 
-from laser_tracker import LaserTarget, LaserTracker
+from laser_tracker import (
+    DEFAULT_PROFILE_PATH,
+    ROTATE_FLAGS,
+    LaserProfile,
+    LaserTarget,
+    LaserTracker,
+    parse_roi,
+)
 from quad_detector import QuadDetector, QuadTarget
 from trajectory_canvas import TrajectoryCanvas
 
@@ -201,13 +210,6 @@ class ArmThread:
 # GUI drawing helpers (from main_laser_quad.py)
 # ---------------------------------------------------------------------------
 
-def parse_roi(roi_str: str) -> tuple:
-    """Parse ROI string 'x1,y1,x2,y2' into tuple."""
-    parts = [int(x.strip()) for x in roi_str.split(",")]
-    if len(parts) != 4:
-        raise ValueError("ROI must be 4 comma-separated integers: x1,y1,x2,y2")
-    return tuple(parts)
-
 
 def draw_quad(frame: np.ndarray, target: QuadTarget) -> None:
     """Draw quadrilateral annotation on frame."""
@@ -360,7 +362,7 @@ def draw_status(
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 100, 0), 1)
 
     # Help
-    help_text = "[q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold"
+    help_text = "[q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold [t]une [s]ave"
     cv2.putText(frame, help_text, (10, h - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (128, 128, 128), 1)
 
@@ -381,6 +383,106 @@ def detect_quad_roi(
     print(f"[OK] Quad detected: {corners_str}")
     print(f"[OK] Auto ROI set: {target.as_xyxy()}")
     return target
+
+
+# ---------------------------------------------------------------------------
+# Interactive HSV Calibration
+# ---------------------------------------------------------------------------
+
+def run_calibration(
+    cap: cv2.VideoCapture,
+    tracker: LaserTracker,
+    save_path: str,
+    rotate_flag=None,
+) -> None:
+    """Interactive HSV calibration with trackbars.
+
+    Adjusts tracker parameters in real-time and optionally saves to JSON.
+    Press 's' to save, 'q' to exit calibration.
+    """
+    win = "HSV Calibration"
+    cv2.namedWindow(win, cv2.WINDOW_AUTOSIZE)
+
+    # Trackbar callbacks (no-op, we poll values)
+    def _noop(_):
+        pass
+
+    cv2.createTrackbar("V min (brightness)", win, tracker.brightness_threshold, 255, _noop)
+    cv2.createTrackbar("S max (saturation)", win, tracker.max_saturation, 255, _noop)
+    cv2.createTrackbar("Area min", win, tracker.min_dot_area, 50, _noop)
+    cv2.createTrackbar("Area max", win, tracker.max_dot_area, 500, _noop)
+    cv2.createTrackbar("Blur kernel", win, tracker.blur_kernel, 21, _noop)
+    cv2.createTrackbar("Hue filter", win, int(tracker.use_hue_filter), 1, _noop)
+    cv2.createTrackbar("H red low", win, tracker.hue_red_low_upper, 30, _noop)
+    cv2.createTrackbar("H red high", win, tracker.hue_red_high_lower, 180, _noop)
+
+    print("[CALIBRATE] Trackbar window opened. [s]ave  [q]uit calibration")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if rotate_flag is not None:
+            frame = cv2.rotate(frame, rotate_flag)
+
+        # Read trackbar values and apply to tracker
+        tracker.brightness_threshold = max(100, cv2.getTrackbarPos("V min (brightness)", win))
+        tracker.max_saturation = cv2.getTrackbarPos("S max (saturation)", win)
+        tracker.min_dot_area = cv2.getTrackbarPos("Area min", win)
+        tracker.max_dot_area = max(tracker.min_dot_area + 1, cv2.getTrackbarPos("Area max", win))
+        bk = cv2.getTrackbarPos("Blur kernel", win)
+        tracker.blur_kernel = max(1, bk if bk % 2 == 1 else bk + 1)
+        tracker.use_hue_filter = bool(cv2.getTrackbarPos("Hue filter", win))
+        tracker.hue_red_low_upper = cv2.getTrackbarPos("H red low", win)
+        tracker.hue_red_high_lower = max(150, cv2.getTrackbarPos("H red high", win))
+
+        # Detect and visualize
+        target = tracker.detect(frame)
+        mask = tracker.create_mask(frame)
+
+        # Top half: frame with mask overlay + detection marker
+        display = frame.copy()
+        mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        mask_bgr[:, :, 0] = 0
+        mask_bgr[:, :, 2] = 0
+        display = cv2.addWeighted(display, 1.0, mask_bgr, 0.5, 0)
+        if target:
+            draw_target(display, target)
+
+        # Bottom half: pure mask (scaled to 3-channel)
+        mask_vis = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+
+        # Stack vertically
+        combined = np.vstack([display, mask_vis])
+
+        # Status text on combined image
+        hue_label = "ON" if tracker.use_hue_filter else "OFF"
+        status = (
+            f"V>={tracker.brightness_threshold} S<={tracker.max_saturation} "
+            f"area=[{tracker.min_dot_area},{tracker.max_dot_area}] "
+            f"blur={tracker.blur_kernel} hue={hue_label}"
+        )
+        cv2.putText(combined, status, (10, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+        det_text = f"Detected: {target}" if target else "Detected: NONE"
+        cv2.putText(combined, det_text, (10, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(combined, "[s]ave  [q]uit", (10, combined.shape[0] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (128, 128, 128), 1)
+
+        cv2.imshow(win, combined)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord("s"):
+            profile = tracker.to_profile()
+            profile.save(save_path)
+            print(f"[CALIBRATE] Profile saved to {save_path}")
+
+        elif key == ord("q"):
+            print("[CALIBRATE] Exiting calibration mode")
+            break
+
+    cv2.destroyWindow(win)
 
 
 # ---------------------------------------------------------------------------
@@ -449,14 +551,55 @@ def main():
         "--rotate", type=int, choices=[0, 90, 180, 270], default=90,
         help="Rotate camera frame CW by degrees (default: 90 for side-mounted camera)",
     )
+    # HSV calibration / profile arguments
+    parser.add_argument(
+        "--calibrate", action="store_true",
+        help="Enter interactive HSV calibration mode before tracking",
+    )
+    parser.add_argument(
+        "--load-profile", metavar="PATH", default=DEFAULT_PROFILE_PATH,
+        help=f"Calibration profile path (default: {DEFAULT_PROFILE_PATH})",
+    )
+    parser.add_argument(
+        "--save-profile", metavar="PATH", default=DEFAULT_PROFILE_PATH,
+        help=f"Path to save calibration profile (default: {DEFAULT_PROFILE_PATH})",
+    )
+    parser.add_argument(
+        "--hue-filter", action="store_true",
+        help="Enable red hue ring validation (rejects non-red bright spots)",
+    )
+    parser.add_argument(
+        "--calibrate-video", metavar="PATH",
+        help="Run offline calibration on a video, save profile, and exit",
+    )
     args = parser.parse_args()
 
+    # --- Offline calibration shortcut ---
+    if args.calibrate_video:
+        print("[INFO] Running offline calibration...")
+        calib_roi = None
+        if args.roi:
+            calib_roi = parse_roi(args.roi)
+        try:
+            profile, stats = LaserTracker.calibrate_profile_from_video(
+                video_path=args.calibrate_video,
+                roi=calib_roi,
+                auto_quad=not args.no_quad,
+                rotate=args.rotate,
+            )
+        except (FileNotFoundError, ValueError) as e:
+            print(f"[ERROR] Calibration failed: {e}")
+            return 1
+        save_path = args.save_profile
+        profile.save(save_path)
+        det = stats["frames_detected"]
+        proc = stats["frames_processed"]
+        rate = stats["detection_rate"]
+        print(f"[OK] Detected {det}/{proc} ({rate:.1%})")
+        print(f"[OK] Profile saved to {save_path}")
+        return 0
+
     # Frame rotation setup
-    ROTATE_FLAGS = {
-        90: cv2.ROTATE_90_CLOCKWISE,
-        180: cv2.ROTATE_180,
-        270: cv2.ROTATE_90_COUNTERCLOCKWISE,
-    }
     rotate_flag = ROTATE_FLAGS.get(args.rotate)  # None if 0
 
     # Parse fallback ROI
@@ -497,12 +640,27 @@ def main():
 
     print(f"[OK] Opened {source_name}")
 
-    # Create laser tracker
-    tracker = LaserTracker(
-        roi=fallback_roi,
-        brightness_threshold=args.brightness,
-        max_saturation=args.saturation,
-    )
+    # Create laser tracker (from profile or CLI args)
+    if os.path.isfile(args.load_profile):
+        try:
+            profile = LaserProfile.load(args.load_profile)
+            tracker = LaserTracker.from_profile(profile, roi=fallback_roi)
+            print(f"[OK] Loaded profile: {args.load_profile}")
+        except (ValueError, KeyError) as e:
+            print(f"[ERROR] Invalid profile {args.load_profile}: {e}")
+            return 1
+    else:
+        if args.load_profile != DEFAULT_PROFILE_PATH:
+            # User explicitly specified a path that doesn't exist
+            print(f"[ERROR] Profile not found: {args.load_profile}")
+            return 1
+        print("[INFO] No profile found, using CLI defaults")
+        tracker = LaserTracker(
+            roi=fallback_roi,
+            brightness_threshold=args.brightness,
+            max_saturation=args.saturation,
+            use_hue_filter=args.hue_filter,
+        )
 
     # Create quad detector
     quad_detector = QuadDetector()
@@ -541,6 +699,11 @@ def main():
 
     print(f"[OK] Tracker: {tracker}")
 
+    # --- Optional: interactive calibration before tracking ---
+    if args.calibrate:
+        run_calibration(cap, tracker, args.save_profile, rotate_flag)
+        print(f"[OK] Post-calibration tracker: {tracker}")
+
     # Rewind video to process first frame in the main loop
     if args.video:
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -571,7 +734,7 @@ def main():
     cv2.namedWindow("Laser Drawing", cv2.WINDOW_AUTOSIZE)
     cv2.namedWindow("Trajectory", cv2.WINDOW_AUTOSIZE)
     print()
-    print("[INFO] Controls: [q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold")
+    print("[INFO] Controls: [q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold [t]une [s]ave")
 
     tracking_enabled = True
     show_mask = False
@@ -703,6 +866,18 @@ def main():
             elif key == ord("c"):
                 canvas.clear()
                 print("[INFO] Trajectory cleared")
+
+            elif key == ord("t"):
+                # Enter interactive calibration mode
+                print("[INFO] Entering calibration mode...")
+                run_calibration(cap, tracker, args.save_profile, rotate_flag)
+                print(f"[INFO] Resumed tracking: {tracker}")
+
+            elif key == ord("s"):
+                # Quick-save current tracker parameters
+                profile = tracker.to_profile()
+                profile.save(args.save_profile)
+                print(f"[INFO] Profile saved to {args.save_profile}")
 
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted")
