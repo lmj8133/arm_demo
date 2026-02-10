@@ -37,8 +37,10 @@ from drawing import DrawingController, DrawingConfig
 def load_commands(csv_path):
     """Load move commands from a CSV file.
 
-    Expected columns: write, x, y
-    Lines starting with '#' and empty lines are skipped.
+    Expected columns: write/status, x, y
+    Lines starting with '#', empty lines, and headers are skipped.
+    Idle rows (0, 0, 0) are passed through — DrawingController.move()
+    handles them as pen-up.
 
     Returns:
         List of (write: bool, x: float, y: float) tuples.
@@ -49,7 +51,9 @@ def load_commands(csv_path):
         for lineno, row in enumerate(reader, start=1):
             if not row or row[0].strip().startswith("#"):
                 continue
-            if row[0].strip().lower() == "write":
+            # Skip header row (write/status/etc.)
+            first = row[0].strip().lower()
+            if first in ("write", "status"):
                 continue
             if len(row) < 3:
                 print(f"[WARN] Line {lineno}: expected 3 columns, got {len(row)}, skipping")
@@ -123,9 +127,27 @@ def main():
             joints = reader.read_joints().positions
             print(f"    Joints: {[f'{math.degrees(j):.1f}' for j in joints]}")
 
+            # Move to center (pen up)
+            print("\n[2] Moving to center (0.5, 0.5)...")
+            input("    Press Enter to move (Ctrl+C to abort)...")
+            ok = drawer.move(False, 0.5, 0.5)
+            if not ok:
+                print("[ERROR] Cannot reach center, aborting")
+                drawer.safe_disable()
+                conn.safe_disable(return_home=False)
+                return
+            pose = reader.read_end_pose()
+            print(f"    Reached: X={pose.x*1000:.1f}, Y={pose.y*1000:.1f}, Z={pose.z*1000:.1f}mm")
+
+            # Pen down
+            print("\n[3] Pen down...")
+            input("    Press Enter to pen down (Ctrl+C to abort)...")
+            drawer.pen_down()
+
+            # Start drawing
             total = len(commands)
-            print(f"\n[2] Executing {total} commands...")
-            input("    Press Enter to start (Ctrl+C to abort)...")
+            print(f"\n[4] Executing {total} commands...")
+            input("    Press Enter to start drawing (Ctrl+C to abort)...")
 
             success_count = 0
             fail_count = 0
@@ -146,7 +168,7 @@ def main():
 
             elapsed = time.monotonic() - t0
 
-            print("\n[3] Pen up...")
+            print("\n[5] Pen up...")
             drawer.pen_up()
 
             print()
@@ -158,7 +180,7 @@ def main():
             print(f"  IK failures : {fail_count}")
             print(f"  Elapsed     : {elapsed:.1f}s")
 
-            print("\n[4] Disabling arm...")
+            print("\n[6] Disabling arm...")
             drawer.safe_disable()
             conn.safe_disable(return_home=False)
             print("[OK] Done!")
