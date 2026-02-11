@@ -59,7 +59,10 @@ sys.path.insert(0, "/workspace/xenreal_001d")
 
 from dvs_tracker import DVSTracker
 from trajectory_canvas import TrajectoryCanvas
-from quad_calibrator import run_quad_calibration, compute_homography, warp_point
+from quad_calibrator import (
+    run_quad_calibration, compute_homography, warp_point,
+    save_calibration, load_calibration, DEFAULT_CALIBRATION_PATH,
+)
 
 # DVS camera dimensions (ESC001D fixed resolution)
 DVS_WIDTH = 164
@@ -413,6 +416,10 @@ def main():
         "--no-cal", action="store_true",
         help="Skip quad calibration (use simple normalization)",
     )
+    parser.add_argument(
+        "--dvs-cal", type=str, default=DEFAULT_CALIBRATION_PATH, metavar="PATH",
+        help=f"DVS calibration file path (default: {DEFAULT_CALIBRATION_PATH})",
+    )
     args = parser.parse_args()
 
     # --arm overrides --no-arm
@@ -436,16 +443,28 @@ def main():
     homography: Optional[np.ndarray] = None
 
     if need_calibration:
+        # Try loading saved corners as initial positions
+        saved_corners = None
+        if os.path.isfile(args.dvs_cal):
+            try:
+                saved_corners = load_calibration(args.dvs_cal)
+                print(f"[OK] Loaded saved corners from {args.dvs_cal}")
+            except (ValueError, KeyError) as e:
+                print(f"[WARNING] Invalid calibration file: {e}")
+
         # Phase 1a: open camera in HYBRID config for RGB preview
         print("[INFO] Starting hybrid camera for quad calibration...")
         xe_cam.CONFIG_ABS_PATH = HYBRID_CONFIG
         xe_cam.start_camera_laser()
 
-        # Phase 1b: run interactive calibration
-        corners = run_quad_calibration(xe_cam, scale=args.scale)
+        # Phase 1b: run interactive calibration (with pre-filled corners if available)
+        corners = run_quad_calibration(
+            xe_cam, scale=args.scale, initial_corners=saved_corners,
+        )
         if corners is not None:
             homography = compute_homography(corners)
-            print(f"[OK] Homography computed from {corners.shape[0]} corners")
+            save_calibration(corners, args.dvs_cal)
+            print(f"[OK] Homography computed, saved to {args.dvs_cal}")
         else:
             print("[INFO] Calibration skipped, using simple normalization")
 

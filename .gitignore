@@ -30,3 +30,4 @@ piper_sdk/
 
 # Generated calibration profiles
 laser_profile.json
+dvs_calibration.json
