@@ -729,9 +729,107 @@ def main():
     else:
         print("[INFO] Arm control disabled (--no-arm)")
 
-    # --- Phase 3: Main loop ---
+    # --- Phase 2.5: Calibration confirmation ---
 
     cv2.namedWindow("Laser Drawing", cv2.WINDOW_AUTOSIZE)
+    print("[INFO] Waiting for calibration confirmation... Press [ENTER] to start tracking.")
+
+    while True:
+        ret, frame = cap.read()
+        if ret and rotate_flag is not None:
+            frame = cv2.rotate(frame, rotate_flag)
+        if not ret:
+            break
+
+        display = frame.copy()
+        if quad:
+            draw_quad(display, quad)
+
+        # Build prompt based on readiness
+        arm_ready = (arm is None) or arm.is_ready.is_set()
+        has_cal = homography is not None
+
+        if not arm_ready:
+            prompt = "Arm initializing..."
+        elif not has_cal:
+            prompt = "No quad detected. [d] detect | [q] quit"
+        else:
+            prompt = "Calibration OK! [ENTER] start | [d] re-detect | [q] quit"
+
+        # Draw prompt banner
+        h_frame = display.shape[0]
+        cv2.rectangle(display, (0, h_frame - 40), (display.shape[1], h_frame), (0, 0, 0), -1)
+        cv2.putText(display, prompt, (10, h_frame - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+        cv2.imshow("Laser Drawing", display)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == 13 and has_cal and arm_ready:  # ENTER
+            bridge.put(True, 0.5, 0.5)
+            print("[INFO] Pen down at center. Prepare, then press [ENTER] to start tracking.")
+            # --- Stage 2: wait for tracking start ---
+            while True:
+                ret2, frame2 = cap.read()
+                if ret2 and rotate_flag is not None:
+                    frame2 = cv2.rotate(frame2, rotate_flag)
+                if not ret2:
+                    break
+                disp2 = frame2.copy()
+                if quad:
+                    draw_quad(disp2, quad)
+                h2 = disp2.shape[0]
+                cv2.rectangle(disp2, (0, h2 - 40), (disp2.shape[1], h2), (0, 0, 0), -1)
+                cv2.putText(disp2, "Pen down. Prepare, then [ENTER] to track | [q] quit",
+                            (10, h2 - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                cv2.imshow("Laser Drawing", disp2)
+                k2 = cv2.waitKey(1) & 0xFF
+                if k2 == 13:  # ENTER
+                    bridge.put(False, 0.0, 0.0)
+                    print("[INFO] Pen up. Tracking started.")
+                    break
+                elif k2 == ord("d"):
+                    print("[INFO] Re-detecting quad...")
+                    quad = detect_quad_roi(frame2, quad_detector)
+                    if quad:
+                        tracker.roi = quad.as_xyxy()
+                        roi_source = "QUAD ROI"
+                        homography = compute_homography(quad)
+                    elif fallback_roi:
+                        tracker.roi = fallback_roi
+                        roi_source = "MANUAL ROI"
+                        homography = None
+                elif k2 == ord("q"):
+                    print("[INFO] Quit")
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    if arm:
+                        arm.stop()
+                        arm.join()
+                    return 0
+            break
+        elif key == ord("d"):
+            print("[INFO] Re-detecting quad...")
+            quad = detect_quad_roi(frame, quad_detector)
+            if quad:
+                tracker.roi = quad.as_xyxy()
+                roi_source = "QUAD ROI"
+                homography = compute_homography(quad)
+            elif fallback_roi:
+                tracker.roi = fallback_roi
+                roi_source = "MANUAL ROI"
+                homography = None
+        elif key == ord("q"):
+            print("[INFO] Quit")
+            cap.release()
+            cv2.destroyAllWindows()
+            if arm:
+                arm.stop()
+                arm.join()
+            return 0
+
+    # --- Phase 3: Main loop ---
+
     cv2.namedWindow("Trajectory", cv2.WINDOW_AUTOSIZE)
     print()
     print("[INFO] Controls: [q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold [t]une [s]ave")

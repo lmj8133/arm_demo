@@ -59,10 +59,15 @@ sys.path.insert(0, "/workspace/xenreal_001d")
 
 from dvs_tracker import DVSTracker
 from trajectory_canvas import TrajectoryCanvas
+from quad_calibrator import run_quad_calibration, compute_homography, warp_point
 
 # DVS camera dimensions (ESC001D fixed resolution)
 DVS_WIDTH = 164
 DVS_HEIGHT = 160
+
+# Camera config paths
+DVS_ONLY_CONFIG = "/workspace/xenreal_001d/ESC001D_DV_RAW4_200FPS_20260204_modify.cfg"
+HYBRID_CONFIG = "/workspace/xenreal_001d/ESC001D_2D_RAW8_DV_RAW2.cfg"
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +276,7 @@ def draw_status(
     bridge: Optional[CommandBridge],
     recording: bool = False,
     record_count: int = 0,
+    homography: Optional[np.ndarray] = None,
 ) -> None:
     """Draw status overlay on the DVS display frame."""
     h, w = frame.shape[:2]
@@ -281,12 +287,26 @@ def draw_status(
     cv2.putText(frame, status, (10, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
+    # Calibration indicator
+    if homography is not None:
+        cv2.putText(frame, "CALIBRATED", (180, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
     # FPS
     cv2.putText(frame, f"{fps:.0f} fps", (w - 90, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
     # Target info
-    if target:
+    if target and homography is not None:
+        wx, wy = warp_point(homography, target.cx, target.cy)
+        in_bounds = 0.0 <= wx <= 1.0 and 0.0 <= wy <= 1.0
+        tag = "" if in_bounds else " [OUT]"
+        cv2.putText(frame,
+                    f"Target: ({target.cx:.0f},{target.cy:.0f}) "
+                    f"warp=({wx:.2f},{wy:.2f}){tag}",
+                    (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 255, 255) if in_bounds else (0, 0, 255), 1)
+    elif target:
         nx, ny = target.normalized_center(DVS_WIDTH, DVS_HEIGHT)
         cv2.putText(frame,
                     f"Target: ({target.cx:.0f},{target.cy:.0f}) "
@@ -389,6 +409,10 @@ def main():
         "--noise-mask", type=str, default=None,
         help="Path to .npy noise recording for hot pixel calibration (laser mode)",
     )
+    parser.add_argument(
+        "--no-cal", action="store_true",
+        help="Skip quad calibration (use simple normalization)",
+    )
     args = parser.parse_args()
 
     # --arm overrides --no-arm
@@ -399,19 +423,44 @@ def main():
     print("DVS Camera Hand Tracking with Trajectory Preview (ex15)")
     print("=" * 60)
 
-    # --- Phase 1: DVS Camera Init ---
+    # --- Phase 1: DVS Camera Init + Calibration ---
 
     device = f"/dev/video{args.camera}"
     print(f"[INFO] DVS device: {device}")
 
-    # Override globals in xe_cam module before calling start_camera_laser()
     import example_open_xe_001d_laser as xe_cam
-    xe_cam.CONFIG_ABS_PATH = "/workspace/xenreal_001d/ESC001D_DV_RAW4_200FPS_20260204_modify.cfg"
     xe_cam.DEVICE = device
 
-    print("[INFO] Starting XenReal DVS camera...")
-    xe_cam.start_camera_laser()
-    print(f"[OK] DVS camera ready ({DVS_WIDTH}x{DVS_HEIGHT})")
+    # Determine whether to run quad calibration
+    need_calibration = (not args.hand) and (not args.no_cal)
+    homography: Optional[np.ndarray] = None
+
+    if need_calibration:
+        # Phase 1a: open camera in HYBRID config for RGB preview
+        print("[INFO] Starting hybrid camera for quad calibration...")
+        xe_cam.CONFIG_ABS_PATH = HYBRID_CONFIG
+        xe_cam.start_camera_laser()
+
+        # Phase 1b: run interactive calibration
+        corners = run_quad_calibration(xe_cam, scale=args.scale)
+        if corners is not None:
+            homography = compute_homography(corners)
+            print(f"[OK] Homography computed from {corners.shape[0]} corners")
+        else:
+            print("[INFO] Calibration skipped, using simple normalization")
+
+        # Phase 1c: close hybrid camera, reopen in DVS-only mode
+        print("[INFO] Switching to DVS-only mode...")
+        xe_cam.close_camera(xe_cam.g_cap)
+        xe_cam.CONFIG_ABS_PATH = DVS_ONLY_CONFIG
+        xe_cam.start_camera_laser()
+        print(f"[OK] DVS camera ready ({DVS_WIDTH}x{DVS_HEIGHT})")
+    else:
+        # Direct DVS-only startup (hand mode or --no-cal)
+        xe_cam.CONFIG_ABS_PATH = DVS_ONLY_CONFIG
+        print("[INFO] Starting XenReal DVS camera...")
+        xe_cam.start_camera_laser()
+        print(f"[OK] DVS camera ready ({DVS_WIDTH}x{DVS_HEIGHT})")
 
     # Create DVS tracker
     if not args.hand:
@@ -488,7 +537,15 @@ def main():
             target = tracker.detect_from_events(event_frame) if tracking_enabled else None
 
             # Feed command bridge + trajectory canvas
-            if target:
+            if target and homography is not None:
+                wx, wy = warp_point(homography, target.cx, target.cy)
+                if 0.0 <= wx <= 1.0 and 0.0 <= wy <= 1.0:
+                    canvas.update(True, wx, wy)    # canvas mirrors camera: nx=L→R(wx), ny=B→T(wy)
+                    bridge.put(True, wx, wy)       # arm: user convention (vertical, horizontal)
+                else:
+                    canvas.update(False, 0.0, 0.0)
+                    bridge.put(False, 0.0, 0.0)
+            elif target:
                 nx, ny = target.normalized_center(DVS_WIDTH, DVS_HEIGHT)
                 # Y-flip: DVS origin is top-left, canvas origin is bottom-left
                 canvas.update(True, nx, 1.0 - ny)
@@ -501,7 +558,8 @@ def main():
             display = dvs_frame_to_bgr(event_frame, scale=args.scale)
             draw_dvs_target_scaled(display, target, scale=args.scale)
             draw_status(display, tracking_enabled, target, fps, arm, bridge,
-                        recording=recording, record_count=len(recorded_frames))
+                        recording=recording, record_count=len(recorded_frames),
+                        homography=homography)
 
             cv2.imshow("DVS Tracking", display)
             cv2.imshow("Trajectory", canvas.render())
