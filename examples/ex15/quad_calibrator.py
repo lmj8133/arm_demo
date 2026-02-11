@@ -11,6 +11,9 @@ Public API:
     save_calibration(corners, path)      -> None
     load_calibration(path)               -> np.ndarray
     DEFAULT_CALIBRATION_PATH             -> str
+    default_corners(width, height, margin)   -> np.ndarray
+    grab_gray_frame(xe_cam)                  -> Optional[np.ndarray]
+    draw_overlay(display, corners, scale, active_idx) -> None
 
 Usage:
     import example_open_xe_001d_laser as xe_cam
@@ -98,10 +101,10 @@ def load_calibration(path: str) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Reusable helpers (also used by dual calibration in ex17)
 # ---------------------------------------------------------------------------
 
-def _default_corners(
+def default_corners(
     width: int = DVS_WIDTH,
     height: int = DVS_HEIGHT,
     margin: float = 0.20,
@@ -117,7 +120,7 @@ def _default_corners(
     ], dtype=np.float32)
 
 
-def _grab_gray_frame(xe_cam) -> Optional[np.ndarray]:
+def grab_gray_frame(xe_cam) -> Optional[np.ndarray]:
     """Capture one hybrid RGB frame (gray channel) from xe_cam.
 
     Returns (H, W) uint8 grayscale, or None on failure.
@@ -136,7 +139,7 @@ def _grab_gray_frame(xe_cam) -> Optional[np.ndarray]:
         return None
 
 
-def _draw_overlay(
+def draw_overlay(
     display: np.ndarray,
     corners: np.ndarray,
     scale: int,
@@ -195,7 +198,7 @@ def run_quad_calibration(
         R           — reset corners to default
         Q / Esc     — cancel
     """
-    corners = initial_corners.copy() if initial_corners is not None else _default_corners()
+    corners = initial_corners.copy() if initial_corners is not None else default_corners()
     dragging_idx: Optional[int] = None
     hit_radius = 15  # px in display space
 
@@ -227,7 +230,7 @@ def run_quad_calibration(
     print("[CAL] Drag corners to adjust.  [Enter] confirm | [R] reset | [Q/Esc] cancel")
 
     while True:
-        gray = _grab_gray_frame(xe_cam)
+        gray = grab_gray_frame(xe_cam)
         if gray is None:
             # Fallback: black frame
             gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
@@ -239,7 +242,7 @@ def run_quad_calibration(
             interpolation=cv2.INTER_NEAREST,
         )
 
-        _draw_overlay(display, corners, scale, dragging_idx)
+        draw_overlay(display, corners, scale, dragging_idx)
 
         # Help text
         h_disp = display.shape[0]
@@ -263,7 +266,7 @@ def run_quad_calibration(
             return corners.copy()
 
         elif key in (ord("r"), ord("R")):
-            corners = _default_corners()
+            corners = default_corners()
             print("[CAL] Corners reset to default")
 
         elif key in (ord("q"), ord("Q"), 27):  # q / Esc

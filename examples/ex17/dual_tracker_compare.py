@@ -69,6 +69,9 @@ from quad_calibrator import (
     compute_homography as dvs_compute_homography,
     warp_point as dvs_warp_point,
     save_calibration, load_calibration, DEFAULT_CALIBRATION_PATH,
+    default_corners as dvs_default_corners,
+    grab_gray_frame as dvs_grab_gray_frame,
+    draw_overlay as dvs_draw_overlay,
 )
 from dvs_laser_tracker import DVSLaserTracker
 
@@ -370,6 +373,157 @@ def _compose_pip(
 
 
 # ---------------------------------------------------------------------------
+# Unified dual calibration (DVS + RGB side-by-side)
+# ---------------------------------------------------------------------------
+
+def run_dual_calibration(
+    xe_cam,
+    cap: cv2.VideoCapture,
+    rotate_flag,
+    quad_detector: QuadDetector,
+    scale: int = 3,
+    initial_corners: Optional[np.ndarray] = None,
+) -> Tuple[Optional[np.ndarray], Optional[QuadTarget]]:
+    """Run DVS quad calibration and RGB quad detection in a single window.
+
+    Left panel: DVS grayscale with draggable quad corners (same as
+    run_quad_calibration).  Right panel: RGB webcam with auto-detected quad.
+
+    Returns:
+        (dvs_corners, rgb_quad) — either may be None if cancelled.
+
+    Controls:
+        Enter   — confirm both calibrations
+        R       — reset DVS corners to default
+        D       — re-detect RGB quad on current frame
+        Q / Esc — cancel (returns None, None)
+    """
+    window_name = "Dual Calibration"
+    corners = initial_corners.copy() if initial_corners is not None else dvs_default_corners()
+    dragging_idx: Optional[int] = None
+    hit_radius = 15  # px in display space
+
+    dvs_panel_w = DVS_WIDTH * scale
+    dvs_panel_h = DVS_HEIGHT * scale
+    sep_w = 2  # separator width
+
+    # Initial RGB quad detection
+    rgb_quad: Optional[QuadTarget] = None
+    ret, first_rgb = cap.read()
+    if ret:
+        if rotate_flag is not None:
+            first_rgb = cv2.rotate(first_rgb, rotate_flag)
+        rgb_quad = detect_quad_roi(first_rgb, quad_detector)
+
+    # ----- mouse callback (only DVS panel) -----
+    def _mouse_cb(event, mx, my, flags, param):
+        nonlocal corners, dragging_idx
+        # Ignore clicks on RGB panel (right side)
+        if mx >= dvs_panel_w:
+            return
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            pts_disp = corners * scale
+            dists = np.sqrt(((pts_disp - [mx, my]) ** 2).sum(axis=1))
+            idx = int(np.argmin(dists))
+            if dists[idx] < hit_radius:
+                dragging_idx = idx
+
+        elif event == cv2.EVENT_MOUSEMOVE and dragging_idx is not None:
+            nx = np.clip(mx / scale, 0, DVS_WIDTH - 1)
+            ny = np.clip(my / scale, 0, DVS_HEIGHT - 1)
+            corners[dragging_idx] = [nx, ny]
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            dragging_idx = None
+
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    cv2.setMouseCallback(window_name, _mouse_cb)
+
+    print("[DUAL-CAL] Side-by-side calibration started")
+    print("[DUAL-CAL] Drag DVS corners (left).  "
+          "[Enter] confirm | [R] reset | [D] re-detect RGB | [Q/Esc] cancel")
+
+    separator = np.zeros((dvs_panel_h, sep_w, 3), dtype=np.uint8)
+
+    while True:
+        # --- DVS panel ---
+        gray = dvs_grab_gray_frame(xe_cam)
+        if gray is None:
+            gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
+
+        bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        dvs_panel = cv2.resize(
+            bgr, (dvs_panel_w, dvs_panel_h),
+            interpolation=cv2.INTER_NEAREST,
+        )
+        dvs_draw_overlay(dvs_panel, corners, scale, dragging_idx)
+        cv2.putText(
+            dvs_panel, "DVS", (10, 22),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
+        )
+
+        # --- RGB panel ---
+        ret, rgb_frame = cap.read()
+        if ret:
+            if rotate_flag is not None:
+                rgb_frame = cv2.rotate(rgb_frame, rotate_flag)
+            rgb_display = rgb_frame.copy()
+            if rgb_quad:
+                draw_quad(rgb_display, rgb_quad)
+            rgb_panel = _resize_to_height(rgb_display, dvs_panel_h)
+        else:
+            rgb_panel = np.zeros((dvs_panel_h, dvs_panel_w, 3), dtype=np.uint8)
+            cv2.putText(rgb_panel, "RGB: no frame", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 1)
+
+        cv2.putText(
+            rgb_panel, "RGB", (10, 22),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
+        )
+
+        # --- Compose ---
+        composed = np.hstack([dvs_panel, separator, rgb_panel])
+
+        ch = composed.shape[0]
+        cv2.putText(
+            composed,
+            "[Enter] confirm  [R] reset DVS  [D] re-detect RGB  [Q/Esc] cancel",
+            (10, ch - 12),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1,
+        )
+
+        cv2.imshow(window_name, composed)
+        key = cv2.waitKey(30) & 0xFF
+
+        if key == 13:  # Enter
+            cv2.destroyWindow(window_name)
+            print(f"[DUAL-CAL] DVS corners confirmed: {corners.tolist()}")
+            if rgb_quad:
+                print(f"[DUAL-CAL] RGB quad confirmed: {rgb_quad}")
+            else:
+                print("[DUAL-CAL] RGB quad: not detected")
+            return corners.copy(), rgb_quad
+
+        elif key in (ord("r"), ord("R")):
+            corners = dvs_default_corners()
+            print("[DUAL-CAL] DVS corners reset to default")
+
+        elif key in (ord("d"), ord("D")):
+            if ret and rgb_frame is not None:
+                rgb_quad = detect_quad_roi(rgb_frame, quad_detector)
+                if rgb_quad:
+                    print("[DUAL-CAL] RGB quad re-detected")
+                else:
+                    print("[DUAL-CAL] RGB quad detection failed")
+
+        elif key in (ord("q"), ord("Q"), 27):  # q / Esc
+            cv2.destroyWindow(window_name)
+            print("[DUAL-CAL] Calibration cancelled")
+            return None, None
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -427,8 +581,11 @@ def main():
     print("DVS vs RGB Dual-Stream Laser Tracking Comparison (ex17)")
     print("=" * 60)
 
+    need_dvs_cal = not args.no_dvs_cal
+    need_rgb_quad = not args.no_rgb_quad
+
     # ===================================================================
-    # Phase 1: DVS Calibration
+    # Phase 1: Open both cameras
     # ===================================================================
 
     device = f"/dev/video{args.dvs_camera}"
@@ -437,53 +594,7 @@ def main():
     import example_open_xe_001d_laser as xe_cam
     xe_cam.DEVICE = device
 
-    dvs_homography: Optional[np.ndarray] = None
-
-    if not args.no_dvs_cal:
-        # Try loading saved corners as initial positions
-        saved_corners = None
-        if os.path.isfile(args.dvs_cal):
-            try:
-                saved_corners = load_calibration(args.dvs_cal)
-                print(f"[DVS] Loaded saved corners from {args.dvs_cal}")
-            except (ValueError, KeyError) as e:
-                print(f"[DVS WARNING] Invalid calibration file: {e}")
-
-        # Open in hybrid mode for calibration
-        print("[DVS] Starting hybrid camera for quad calibration...")
-        xe_cam.CONFIG_ABS_PATH = HYBRID_CONFIG
-        xe_cam.start_camera_laser()
-
-        corners = run_quad_calibration(
-            xe_cam, scale=args.scale, initial_corners=saved_corners,
-        )
-        if corners is not None:
-            dvs_homography = dvs_compute_homography(corners)
-            save_calibration(corners, args.dvs_cal)
-            print(f"[DVS] Homography computed, saved to {args.dvs_cal}")
-        else:
-            print("[DVS] Calibration skipped, using simple normalization")
-
-        # Switch to DVS-only mode
-        print("[DVS] Switching to DVS-only mode...")
-        xe_cam.close_camera(xe_cam.g_cap)
-
-    xe_cam.CONFIG_ABS_PATH = DVS_ONLY_CONFIG
-    xe_cam.start_camera_laser()
-    print(f"[DVS] Camera ready ({DVS_WIDTH}x{DVS_HEIGHT})")
-
-    # Create DVS tracker
-    dvs_tracker = DVSLaserTracker(
-        width=DVS_WIDTH,
-        height=DVS_HEIGHT,
-        noise_mask_path=args.noise_mask,
-    )
-    print(f"[DVS] Tracker: {dvs_tracker}")
-
-    # ===================================================================
-    # Phase 2: RGB Webcam Calibration
-    # ===================================================================
-
+    # --- Open RGB webcam early (needed for dual calibration) ---
     print()
     try:
         rgb_dev = int(args.rgb_camera)
@@ -498,17 +609,15 @@ def main():
 
     if not cap.isOpened():
         print(f"[ERROR] Cannot open RGB camera: {rgb_dev}")
-        xe_cam.close_camera(xe_cam.g_cap)
         return 1
 
     rotate_flag = ROTATE_FLAGS.get(args.rgb_rotate)
 
-    # Read first frame
+    # Read first frame to determine size
     ret, first_frame = cap.read()
     if not ret:
         print("[ERROR] Cannot read first RGB frame")
         cap.release()
-        xe_cam.close_camera(xe_cam.g_cap)
         return 1
     if rotate_flag is not None:
         first_frame = cv2.rotate(first_frame, rotate_flag)
@@ -516,6 +625,95 @@ def main():
     actual_h, actual_w = first_frame.shape[:2]
     print(f"[RGB] Frame size: {actual_w}x{actual_h}"
           f"{f' (rotated {args.rgb_rotate}°)' if rotate_flag else ''}")
+
+    # ===================================================================
+    # Phase 2: Calibration (branched by flags)
+    # ===================================================================
+
+    dvs_homography: Optional[np.ndarray] = None
+    quad: Optional[QuadTarget] = None
+    rgb_homography: Optional[np.ndarray] = None
+    quad_detector = QuadDetector()
+
+    # Load saved DVS corners as initial positions (if available)
+    saved_corners = None
+    if need_dvs_cal and os.path.isfile(args.dvs_cal):
+        try:
+            saved_corners = load_calibration(args.dvs_cal)
+            print(f"[DVS] Loaded saved corners from {args.dvs_cal}")
+        except (ValueError, KeyError) as e:
+            print(f"[DVS WARNING] Invalid calibration file: {e}")
+
+    if need_dvs_cal and need_rgb_quad:
+        # --- Unified dual calibration (DVS + RGB side-by-side) ---
+        print("[CAL] Starting unified dual calibration (DVS + RGB)...")
+        xe_cam.CONFIG_ABS_PATH = HYBRID_CONFIG
+        xe_cam.start_camera_laser()
+
+        dvs_corners, rgb_quad = run_dual_calibration(
+            xe_cam, cap, rotate_flag, quad_detector,
+            scale=args.scale, initial_corners=saved_corners,
+        )
+
+        if dvs_corners is not None:
+            dvs_homography = dvs_compute_homography(dvs_corners)
+            save_calibration(dvs_corners, args.dvs_cal)
+            print(f"[DVS] Homography computed, saved to {args.dvs_cal}")
+        else:
+            print("[DVS] Calibration skipped, using simple normalization")
+
+        quad = rgb_quad
+        if quad:
+            rgb_homography = rgb_compute_homography(quad)
+
+        # Close hybrid mode
+        print("[DVS] Switching to DVS-only mode...")
+        xe_cam.close_camera(xe_cam.g_cap)
+
+    elif need_dvs_cal:
+        # --- DVS-only quad calibration ---
+        print("[DVS] Starting hybrid camera for quad calibration...")
+        xe_cam.CONFIG_ABS_PATH = HYBRID_CONFIG
+        xe_cam.start_camera_laser()
+
+        corners = run_quad_calibration(
+            xe_cam, scale=args.scale, initial_corners=saved_corners,
+        )
+        if corners is not None:
+            dvs_homography = dvs_compute_homography(corners)
+            save_calibration(corners, args.dvs_cal)
+            print(f"[DVS] Homography computed, saved to {args.dvs_cal}")
+        else:
+            print("[DVS] Calibration skipped, using simple normalization")
+
+        # Close hybrid mode
+        print("[DVS] Switching to DVS-only mode...")
+        xe_cam.close_camera(xe_cam.g_cap)
+
+    # Reopen DVS in DVS-only mode for tracking
+    xe_cam.CONFIG_ABS_PATH = DVS_ONLY_CONFIG
+    xe_cam.start_camera_laser()
+    print(f"[DVS] Camera ready ({DVS_WIDTH}x{DVS_HEIGHT})")
+
+    # Create DVS tracker
+    dvs_tracker = DVSLaserTracker(
+        width=DVS_WIDTH,
+        height=DVS_HEIGHT,
+        noise_mask_path=args.noise_mask,
+    )
+    print(f"[DVS] Tracker: {dvs_tracker}")
+
+    # --- RGB-only quad detection (if DVS cal was skipped) ---
+    if not need_dvs_cal and need_rgb_quad:
+        ret, fresh_frame = cap.read()
+        if ret:
+            if rotate_flag is not None:
+                fresh_frame = cv2.rotate(fresh_frame, rotate_flag)
+            quad = detect_quad_roi(fresh_frame, quad_detector)
+            if quad:
+                rgb_homography = rgb_compute_homography(quad)
+    elif not need_rgb_quad:
+        print("[RGB] Quad detection disabled")
 
     # Create RGB laser tracker
     if os.path.isfile(args.load_profile):
@@ -528,18 +726,8 @@ def main():
         print("[RGB] Using default tracker parameters")
         rgb_tracker = LaserTracker()
 
-    # Quad detection
-    quad: Optional[QuadTarget] = None
-    rgb_homography: Optional[np.ndarray] = None
-    quad_detector = QuadDetector()
-
-    if not args.no_rgb_quad:
-        quad = detect_quad_roi(first_frame, quad_detector)
-        if quad:
-            rgb_tracker.roi = quad.as_xyxy()
-            rgb_homography = rgb_compute_homography(quad)
-    else:
-        print("[RGB] Quad detection disabled")
+    if quad:
+        rgb_tracker.roi = quad.as_xyxy()
 
     print(f"[RGB] Tracker: {rgb_tracker}")
 
