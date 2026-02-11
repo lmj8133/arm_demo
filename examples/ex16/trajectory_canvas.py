@@ -34,6 +34,7 @@ class TrajectoryCanvas:
         # Idle auto-clear (0 = disabled)
         self._idle_clear = idle_clear
         self._last_write_time: float = time.time()
+        self._pending_clear = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -51,7 +52,10 @@ class TrajectoryCanvas:
             self._cursor = (nx, ny)
             self._last_write_time = time.time()
             if not self._pen_down:
-                # Start a new stroke
+                # Pen-down transition: clear old strokes if pending
+                if self._pending_clear:
+                    self._strokes.clear()
+                    self._pending_clear = False
                 self._current_stroke = [(nx, ny)]
                 self._pen_down = True
             else:
@@ -63,11 +67,12 @@ class TrajectoryCanvas:
                     self._strokes.append(self._current_stroke)
                 self._current_stroke = []
                 self._pen_down = False
-            # Auto-clear after idle timeout
+            # Mark pending clear after idle timeout (do NOT clear yet)
             if (self._idle_clear > 0
+                    and not self._pending_clear
                     and self._has_strokes()
                     and time.time() - self._last_write_time > self._idle_clear):
-                self.clear()
+                self._pending_clear = True
 
     def render(self) -> np.ndarray:
         """Render the canvas and return a BGR image."""
@@ -85,6 +90,7 @@ class TrajectoryCanvas:
         self._strokes.clear()
         self._current_stroke.clear()
         self._pen_down = False
+        self._pending_clear = False
 
     def _has_strokes(self) -> bool:
         """Return True if there are any completed or in-progress strokes."""
@@ -200,16 +206,21 @@ class TrajectoryCanvas:
         cv2.putText(canvas, coord_text, (self._size - 120, y_base),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (128, 128, 128), 1)
 
-        # Idle auto-clear countdown (above the bottom status line)
+        # Idle auto-clear countdown / pending indicator
         if (self._idle_clear > 0
                 and not self._pen_down
                 and self._has_strokes()):
-            remaining = self._idle_clear - (time.time() - self._last_write_time)
-            if remaining > 0:
-                countdown = f"clear in {remaining:.0f}s"
-                cv2.putText(canvas, countdown,
-                            (self._size - 130, y_base - 18),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 140, 255), 1)
+            if self._pending_clear:
+                cv2.putText(canvas, "pending clear",
+                            (self._size - 150, y_base - 18),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+            else:
+                remaining = self._idle_clear - (time.time() - self._last_write_time)
+                if remaining > 0:
+                    countdown = f"clear in {remaining:.0f}s"
+                    cv2.putText(canvas, countdown,
+                                (self._size - 130, y_base - 18),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 140, 255), 1)
 
         # Title
         cv2.putText(canvas, "Trajectory", (self._margin, 20),

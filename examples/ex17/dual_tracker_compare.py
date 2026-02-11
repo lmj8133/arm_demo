@@ -393,8 +393,8 @@ def main():
         help="DVS display scale factor (default: 3)",
     )
     parser.add_argument(
-        "--idle-clear", type=float, default=5.0,
-        help="Trajectory auto-clear idle timeout in seconds (0=disable)",
+        "--idle-clear", type=float, default=1.0,
+        help="Trajectory auto-clear idle timeout in seconds (0=disable, default: 1)",
     )
     parser.add_argument(
         "--noise-mask", metavar="PATH",

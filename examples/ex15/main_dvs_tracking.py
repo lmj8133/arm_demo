@@ -376,8 +376,8 @@ def main():
         help="Display scale factor (default: 3, 164x160 -> 492x480)",
     )
     parser.add_argument(
-        "--idle-clear", type=float, default=5, metavar="SEC",
-        help="Auto-clear trajectory after SEC seconds idle (0=disabled, default: 5)",
+        "--idle-clear", type=float, default=1, metavar="SEC",
+        help="Auto-clear trajectory after SEC seconds idle (0=disabled, default: 1)",
     )
     # Arm arguments
     parser.add_argument(

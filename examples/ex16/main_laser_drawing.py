@@ -544,8 +544,8 @@ def main():
         help="Camera-only mode (no arm control)",
     )
     parser.add_argument(
-        "--idle-clear", type=float, default=5, metavar="SEC",
-        help="Auto-clear canvas after SEC seconds of pen-up idle (0=disabled, e.g. 5 for trade show mode)",
+        "--idle-clear", type=float, default=1, metavar="SEC",
+        help="Auto-clear canvas after SEC seconds of pen-up idle (0=disabled, default: 1)",
     )
     parser.add_argument(
         "--rotate", type=int, choices=[0, 90, 180, 270], default=90,
