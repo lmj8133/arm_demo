@@ -104,7 +104,8 @@ class CommandBridge:
 class ArmThread:
     """Background thread that consumes commands from CommandBridge."""
 
-    def __init__(self, bridge: CommandBridge, can_name: str, speed: float):
+    def __init__(self, bridge: CommandBridge, can_name: str, speed: float,
+                 conn=None, drawer=None, reader=None):
         self._bridge = bridge
         self._can_name = can_name
         self._speed = speed
@@ -118,9 +119,10 @@ class ArmThread:
         self.move_count = 0
         self.fail_count = 0
 
-        # Internal references (set during _init_arm)
-        self._conn = None
-        self._drawer = None
+        # Internal references (pre-initialized from wizard, or set during _init_arm)
+        self._conn = conn
+        self._drawer = drawer
+        self._reader = reader
 
     def start(self) -> None:
         """Launch daemon thread."""
@@ -139,7 +141,11 @@ class ArmThread:
     def _run(self) -> None:
         """Thread entry point."""
         try:
-            self._init_arm()
+            if self._drawer is not None:
+                # Reuse pre-initialized connection from wizard
+                print("[ARM] Reusing wizard connection")
+            else:
+                self._init_arm()
             self.is_ready.set()
             self.is_running = True
             self._consume_loop()
@@ -572,6 +578,23 @@ def main():
         "--calibrate-video", metavar="PATH",
         help="Run offline calibration on a video, save profile, and exit",
     )
+    # Wizard arguments
+    parser.add_argument(
+        "--wizard", action="store_true",
+        help="Run calibration wizard before starting tracking",
+    )
+    parser.add_argument(
+        "--hand-type", default="right", choices=["left", "right"],
+        help="Hand type for grip calibration (default: right)",
+    )
+    parser.add_argument(
+        "--hand-can", default="can1",
+        help="CAN interface for hand (default: can1)",
+    )
+    parser.add_argument(
+        "--no-hand", action="store_true",
+        help="Skip hand grip calibration step in wizard",
+    )
     args = parser.parse_args()
 
     # --- Offline calibration shortcut ---
@@ -700,9 +723,57 @@ def main():
     print(f"[OK] Tracker: {tracker}")
 
     # --- Optional: interactive calibration before tracking ---
-    if args.calibrate:
+    if args.calibrate and not args.wizard:
         run_calibration(cap, tracker, args.save_profile, rotate_flag)
         print(f"[OK] Post-calibration tracker: {tracker}")
+
+    # --- Optional: Calibration Wizard ---
+    wizard_mode = False
+    wizard_arm_conn = None
+    wizard_arm_drawer = None
+    wizard_arm_reader = None
+
+    if args.wizard:
+        from calibration_wizard import CalibrationWizard
+
+        hand_config = {
+            "hand_type": args.hand_type,
+            "hand_joint": "O6",
+            "can": args.hand_can,
+            "no_hand": args.no_hand,
+            "dry_run": args.no_arm,
+        }
+        wizard = CalibrationWizard(
+            cap=cap,
+            tracker=tracker,
+            quad_detector=quad_detector,
+            rotate_flag=rotate_flag,
+            profile_path=args.save_profile,
+
+            arm_can=args.can,
+            speed=speed,
+            hand_config=hand_config,
+            no_arm=args.no_arm,
+        )
+        result = wizard.run()
+
+        if result.get("quit"):
+            cap.release()
+            cv2.destroyAllWindows()
+            return 0
+
+        # Apply wizard results
+        if result.get("quad"):
+            quad = result["quad"]
+            tracker.roi = quad.as_xyxy()
+            roi_source = "QUAD ROI"
+            homography = result.get("homography")
+
+        wizard_arm_conn = result.get("arm_conn")
+        wizard_arm_drawer = result.get("arm_drawer")
+        wizard_arm_reader = result.get("arm_reader")
+        wizard_mode = True
+        print(f"[OK] Wizard complete. Tracker: {tracker}")
 
     # Rewind video to process first frame in the main loop
     if args.video:
@@ -723,7 +794,9 @@ def main():
     arm: Optional[ArmThread] = None
 
     if not args.no_arm:
-        arm = ArmThread(bridge, can_name=args.can, speed=speed)
+        arm = ArmThread(bridge, can_name=args.can, speed=speed,
+                        conn=wizard_arm_conn, drawer=wizard_arm_drawer,
+                        reader=wizard_arm_reader)
         arm.start()
         print("[INFO] Arm initialization started in background...")
     else:
@@ -731,10 +804,13 @@ def main():
 
     # --- Phase 3: Main loop ---
 
-    cv2.namedWindow("Laser Drawing", cv2.WINDOW_AUTOSIZE)
+    show_camera = not wizard_mode
+    if show_camera:
+        cv2.namedWindow("Laser Drawing", cv2.WINDOW_AUTOSIZE)
     cv2.namedWindow("Trajectory", cv2.WINDOW_AUTOSIZE)
     print()
-    print("[INFO] Controls: [q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold [t]une [s]ave")
+    controls = "[q]uit [space]toggle [d]etect quad [r]eset [m]ask [c]lear [+/-]threshold [t]une [s]ave [w]izard"
+    print(f"[INFO] Controls: {controls}")
 
     tracking_enabled = True
     show_mask = False
@@ -819,7 +895,8 @@ def main():
             if writer:
                 writer.write(display)
 
-            cv2.imshow("Laser Drawing", display)
+            if show_camera:
+                cv2.imshow("Laser Drawing", display)
             cv2.imshow("Trajectory", canvas.render())
 
             # Keyboard input
@@ -882,6 +959,38 @@ def main():
                 profile = tracker.to_profile()
                 profile.save(args.save_profile)
                 print(f"[INFO] Profile saved to {args.save_profile}")
+
+            elif key == ord("w"):
+                # Re-launch calibration wizard
+                print("[INFO] Entering wizard mode...")
+                tracking_enabled = False
+                from calibration_wizard import CalibrationWizard
+                hand_config = {
+                    "hand_type": args.hand_type,
+                    "hand_joint": "O6",
+                    "can": args.hand_can,
+                    "no_hand": args.no_hand,
+                    "dry_run": args.no_arm,
+                }
+                wiz = CalibrationWizard(
+                    cap=cap, tracker=tracker,
+                    quad_detector=quad_detector,
+                    rotate_flag=rotate_flag,
+                    profile_path=args.save_profile,
+        
+                    arm_can=args.can, speed=speed,
+                    hand_config=hand_config,
+                    no_arm=args.no_arm,
+                )
+                wiz_result = wiz.run()
+                if not wiz_result.get("quit"):
+                    if wiz_result.get("quad"):
+                        quad = wiz_result["quad"]
+                        tracker.roi = quad.as_xyxy()
+                        roi_source = "QUAD ROI"
+                        homography = wiz_result.get("homography")
+                    tracking_enabled = True
+                    print(f"[INFO] Wizard done, resumed tracking: {tracker}")
 
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted")
