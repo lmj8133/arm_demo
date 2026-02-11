@@ -32,7 +32,7 @@ from piper_demo.kinematics import forward_kinematics
 
 # Default initial joints (HOME_POSITION from find_optimal_z.py)
 #DEFAULT_INIT_JOINTS_DEG = [0, 75.229, -41.940, -3.245, 61.653, 1.401]
-DEFAULT_INIT_JOINTS_DEG = [0, 117.419, -32.810, 5.728, -70, 1.368]
+DEFAULT_INIT_JOINTS_DEG = [0, 100.9, -34.2, 0.4, -53.5, 0.9]
 
 def main():
     parser = argparse.ArgumentParser(

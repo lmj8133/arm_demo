@@ -42,7 +42,10 @@ from piper_demo.kinematics import forward_kinematics
 from piper_demo.joint_reader import JointReader
 
 # Drawing pose joint angles (pen-down orientation)
-DRAWING_JOINTS = [0, 2.02786, -0.57318, 0.13404, -1.19086, 0.01389]
+#DRAWING_JOINTS = []
+
+DRAWING_JOINTS = [math.radians(x) for x in (0, 100.9, -34.2, 0.4, -53.5, 0.9)]
+
 
 # Derive fixed end-effector orientation from drawing pose via FK
 _home_fk = forward_kinematics(DRAWING_JOINTS)
@@ -59,7 +62,7 @@ IK_CFG = IKConfig(
 )
 
 # Home joint angles for safe shutdown (editable)
-SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.01383]
+SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 @dataclass
@@ -67,19 +70,19 @@ class DrawingConfig:
     """Configuration for drawing operations."""
 
     # Drawing plane Z heights (meters)
-    draw_z: float = 0.18  # Z height when pen touches surface
-    safe_z: float = 0.21  # Z height when pen is lifted (draw_z + 0.03)
+    draw_z: float = 0.20  # Z height when pen touches surface
+    safe_z: float = 0.23  # Z height when pen is lifted (draw_z + 0.03)
 
     # Motion parameters
     draw_speed: float = 0.3   # Speed factor for drawing (0-1)
     move_speed: float = 0.3   # Speed factor for travel moves
-    interval: float = 0.05    # Fire-and-forget sleep interval (s)
+    interval: float = 0.01    # Fire-and-forget sleep interval (s)
 
     # Workspace limits (safety bounds in meters)
     x_min: float = 0.220
     x_max: float = 0.420
-    y_min: float = -0.111
-    y_max: float = 0.099
+    y_min: float = -0.10
+    y_max: float = 0.10
 
     # Interpolation
     max_step_length: float = 0.002  # Auto-interpolate steps longer than this (m)

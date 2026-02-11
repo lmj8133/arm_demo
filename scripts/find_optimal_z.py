@@ -17,6 +17,7 @@ Output:
 import argparse
 import sys
 import os
+import math
 
 # Add src/piper_demo directly to path to avoid __init__.py triggering piper_sdk import
 _piper_demo_path = os.path.join(os.path.dirname(__file__), "..", "src", "piper_demo")
@@ -28,7 +29,8 @@ from inverse_kinematics import inverse_kinematics, IKConfig
 
 # Drawing pose: pen pointing down (RY ≈ 88°)
 # Position: X=346mm, Y=14mm, Z=130mm
-HOME_POSITION = [0.02070, 2.02836, -0.67533, -0.07916, -1.30194, 0.01630]
+#HOME_POSITION = [0.02070, 2.02836, -0.67533, -0.07916, -1.30194, 0.01630]
+HOME_POSITION = [math.radians(x) for x in (0, 100.9, -34.2, 0.4, -53.5, 0.9)]
 
 
 def convex_hull_area(points: list[tuple[float, float]]) -> float:
