@@ -42,8 +42,8 @@ def main():
         help="Gripper opening in mm (for 'set' action, default: 40)"
     )
     parser.add_argument(
-        "--speed", type=int, default=500,
-        help="Gripper speed 0-1000 (default: 500)"
+        "--effort", type=int, default=5000,
+        help="Gripper effort / torque limit 0-5000 in 0.001 N·m (default: 5000)"
     )
     args = parser.parse_args()
 
@@ -53,7 +53,7 @@ def main():
         with PiperConnection(can_name=args.can) as conn:
             gripper = GripperController(
                 conn.piper,
-                speed=args.speed,
+                effort=args.effort,
             )
 
             # Read current position
@@ -70,15 +70,15 @@ def main():
 
             if args.action == "open":
                 print("[INFO] Opening gripper...")
-                gripper.open(speed=args.speed)
+                gripper.open(effort=args.effort)
 
             elif args.action == "close":
                 print("[INFO] Closing gripper...")
-                gripper.close(speed=args.speed)
+                gripper.close(effort=args.effort)
 
             elif args.action == "set":
                 print(f"[INFO] Setting gripper to {args.position:.1f} mm...")
-                gripper.set_position_mm(args.position, speed=args.speed)
+                gripper.set_position_mm(args.position, effort=args.effort)
 
             # Wait for gripper motion
             time.sleep(1.0)

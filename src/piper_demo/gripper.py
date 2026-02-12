@@ -3,6 +3,7 @@
 Provides GripperController class for gripper open/close operations.
 """
 
+import time
 from typing import Optional
 
 from piper_sdk import C_PiperInterface_V2
@@ -24,33 +25,35 @@ class GripperController:
         gripper.set_position(0.05)
 
     Note:
-        GripperCtrl API: GripperCtrl(position, speed, mode, control)
-        - position: 0.001mm units (0-80000 for 0-80mm)
-        - speed: 0-1000
-        - mode: 0x01=control, 0x02=initialize
-        - control: 0
+        GripperCtrl API: GripperCtrl(gripper_angle, gripper_effort, gripper_code, set_zero)
+        - gripper_angle: 0.001mm units (0-80000 for 0-80mm)
+        - gripper_effort: torque limit in 0.001 N·m (0-5000 for 0-5 N·m)
+        - gripper_code: 0x00=disable, 0x01=enable, 0x02=disable+clear, 0x03=enable+clear
+        - set_zero: 0x00=noop, 0xAE=set zero
     """
 
     # Default gripper parameters
-    DEFAULT_SPEED = 1000  # Speed value (0-1000)
+    DEFAULT_EFFORT = 5000  # Effort value in 0.001 N·m (0-5000)
+    EFFORT_MIN = 0
+    EFFORT_MAX = 5000
 
     # Gripper control modes
-    MODE_INIT = 0x02
-    MODE_CONTROL = 0x01
+    MODE_DISABLE_CLEAR = 0x02
+    MODE_ENABLE = 0x01
 
     def __init__(
         self,
         piper: C_PiperInterface_V2,
-        speed: int = DEFAULT_SPEED,
+        effort: int = DEFAULT_EFFORT,
     ):
         """Initialize GripperController.
 
         Args:
             piper: Connected C_PiperInterface_V2 instance
-            speed: Default gripper speed (0-1000)
+            effort: Default gripper effort / torque limit (0-5000, in 0.001 N·m)
         """
         self.piper = piper
-        self.speed = max(0, min(1000, speed))
+        self.effort = max(self.EFFORT_MIN, min(self.EFFORT_MAX, effort))
         self._current_position: Optional[float] = None
         self._initialized = False
 
@@ -58,40 +61,42 @@ class GripperController:
         """Initialize gripper before control.
 
         Must be called once before open/close/set_position.
-        This sends mode=0x02 to prepare the gripper.
+        Sends disable+clear then enable to prepare the gripper.
         """
-        # Send initialization command (mode=0x02)
-        self.piper.GripperCtrl(0, self.speed, self.MODE_INIT, 0)
-        # Then switch to control mode (mode=0x01)
-        self.piper.GripperCtrl(0, self.speed, self.MODE_CONTROL, 0)
+        # Send disable+clear command (mode=0x02)
+        self.piper.GripperCtrl(0, self.effort, self.MODE_DISABLE_CLEAR, 0)
+        time.sleep(0.5)  # Wait for gripper to process init
+        # Then switch to enable mode (mode=0x01)
+        self.piper.GripperCtrl(0, self.effort, self.MODE_ENABLE, 0)
+        time.sleep(0.5)  # Wait for gripper to enter control mode
         self._initialized = True
 
-    def open(self, speed: Optional[int] = None) -> None:
+    def open(self, effort: Optional[int] = None) -> None:
         """Fully open the gripper.
 
         Args:
-            speed: Override default speed
+            effort: Override default effort (torque limit)
         """
-        self.set_position(GRIPPER_LIMIT_M[1], speed)
+        self.set_position(GRIPPER_LIMIT_M[1], effort)
 
-    def close(self, speed: Optional[int] = None) -> None:
+    def close(self, effort: Optional[int] = None) -> None:
         """Fully close the gripper.
 
         Args:
-            speed: Override default speed
+            effort: Override default effort (torque limit)
         """
-        self.set_position(GRIPPER_LIMIT_M[0], speed)
+        self.set_position(GRIPPER_LIMIT_M[0], effort)
 
     def set_position(
         self,
         position_m: float,
-        speed: Optional[int] = None,
+        effort: Optional[int] = None,
     ) -> None:
         """Set gripper to specific opening.
 
         Args:
             position_m: Target opening in meters (0.0 to 0.08)
-            speed: Override default speed
+            effort: Override default effort (torque limit)
 
         Note:
             Automatically calls initialize() on first control command.
@@ -101,29 +106,29 @@ class GripperController:
             self.initialize()
 
         position_m = clamp_gripper_position(position_m)
-        use_speed = speed if speed is not None else self.speed
+        use_effort = effort if effort is not None else self.effort
 
         # Convert to SDK units (0.001mm)
         # meters * 1000000 = 0.001mm units
         position_001mm = int(position_m * 1000000)
 
         # Send gripper command
-        # GripperCtrl(position, speed, mode, control)
-        self.piper.GripperCtrl(position_001mm, use_speed, self.MODE_CONTROL, 0)
+        # GripperCtrl(gripper_angle, gripper_effort, gripper_code, set_zero)
+        self.piper.GripperCtrl(position_001mm, use_effort, self.MODE_ENABLE, 0)
         self._current_position = position_m
 
     def set_position_mm(
         self,
         position_mm: float,
-        speed: Optional[int] = None,
+        effort: Optional[int] = None,
     ) -> None:
         """Set gripper to specific opening in millimeters.
 
         Args:
             position_mm: Target opening in mm (0 to 80)
-            speed: Override default speed
+            effort: Override default effort (torque limit)
         """
-        self.set_position(position_mm / 1000.0, speed)
+        self.set_position(position_mm / 1000.0, effort)
 
     def read_position(self) -> float:
         """Read current gripper position.
@@ -145,13 +150,30 @@ class GripperController:
         """
         return self.read_position() * 1000.0
 
-    def set_speed(self, speed: int) -> None:
-        """Set default gripper speed.
+    def read_effort_raw(self) -> int:
+        """Read current gripper effort (raw SDK value).
+
+        Returns:
+            Effort in 0.001 N·m units (0-5000)
+        """
+        gripper_msg = self.piper.GetArmGripperMsgs()
+        return gripper_msg.gripper_state.grippers_effort
+
+    def read_effort(self) -> float:
+        """Read current gripper effort in N·m.
+
+        Returns:
+            Effort in N·m (0.0-5.0)
+        """
+        return self.read_effort_raw() / 1000.0
+
+    def set_effort(self, effort: int) -> None:
+        """Set default gripper effort (torque limit).
 
         Args:
-            speed: Speed value (0-1000)
+            effort: Effort value in 0.001 N·m (0-5000)
         """
-        self.speed = max(0, min(1000, speed))
+        self.effort = max(self.EFFORT_MIN, min(self.EFFORT_MAX, effort))
 
     @property
     def current_position(self) -> Optional[float]:
