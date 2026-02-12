@@ -70,11 +70,11 @@ class DrawingConfig:
     """Configuration for drawing operations."""
 
     # Drawing plane Z heights (meters)
-    draw_z: float = 0.20  # Z height when pen touches surface
+    draw_z: float = 0.18  # Z height when pen touches surface
     safe_z: float = 0.23  # Z height when pen is lifted (draw_z + 0.03)
 
     # Motion parameters
-    draw_speed: float = 0.3   # Speed factor for drawing (0-1)
+    draw_speed: float = 0.2   # Speed factor for drawing (0-1)
     move_speed: float = 0.3   # Speed factor for travel moves
     interval: float = 0.01    # Fire-and-forget sleep interval (s)
 
@@ -264,8 +264,8 @@ class DrawingController:
             (x, y) in meters within workspace bounds.
         """
         cfg = self.config
-        x = cfg.x_max - cx * (cfg.x_max - cfg.x_min)
-        y = cfg.y_max - cy * (cfg.y_max - cfg.y_min)
+        x = cfg.x_max - cy * (cfg.y_max - cfg.y_min)
+        y = cfg.y_min + cx * (cfg.x_max - cfg.x_min)
         return x, y
 
     def _clamp_position(self, x: float, y: float) -> Tuple[float, float]:
