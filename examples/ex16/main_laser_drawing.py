@@ -58,6 +58,7 @@ from laser_tracker import (
 )
 from quad_detector import QuadDetector, QuadTarget
 from trajectory_canvas import TrajectoryCanvas
+from gripper_tune import run_gripper_tune
 
 # Colors for quad corner labels (BGR)
 CORNER_COLORS = {
@@ -135,6 +136,11 @@ class ArmThread:
         """Wait for completion."""
         if self._thread is not None:
             self._thread.join(timeout=timeout)
+
+    @property
+    def piper(self):
+        """Access C_PiperInterface_V2 (available after is_ready)."""
+        return self._conn.piper if self._conn is not None else None
 
     def _run(self) -> None:
         """Thread entry point."""
@@ -544,6 +550,10 @@ def main():
         help="Camera-only mode (no arm control)",
     )
     parser.add_argument(
+        "--no-gripper-tune", action="store_true",
+        help="Skip gripper fine-tune TUI before tracking",
+    )
+    parser.add_argument(
         "--idle-clear", type=float, default=1, metavar="SEC",
         help="Auto-clear canvas after SEC seconds of pen-up idle (0=disabled, default: 1)",
     )
@@ -785,6 +795,14 @@ def main():
                 cv2.imshow("Laser Drawing", disp2)
                 k2 = cv2.waitKey(1) & 0xFF
                 if k2 == 13:  # ENTER
+                    # --- Gripper fine-tune phase ---
+                    if arm is not None and not args.no_gripper_tune:
+                        print("[INFO] Entering gripper fine-tune TUI...")
+                        run_gripper_tune(
+                            piper=arm.piper,
+                            can_name=args.can,
+                        )
+                        print("[INFO] Gripper tune complete.")
                     bridge.put(False, 0.0, 0.0)
                     print("[INFO] Pen up. Tracking started.")
                     break

@@ -42,9 +42,9 @@ from piper_demo.kinematics import forward_kinematics
 from piper_demo.joint_reader import JointReader
 
 # Drawing pose joint angles (pen-down orientation)
-#DRAWING_JOINTS = []
+DRAWING_JOINTS = [0, 2.02786, -0.57318, 0.13404, -1.19086, 0.01389]
 
-DRAWING_JOINTS = [math.radians(x) for x in (0, 100.9, -34.2, 0.4, -53.5, 0.9)]
+#DRAWING_JOINTS = [math.radians(x) for x in (0, 100.9, -34.2, 0.4, -53.5, 0.9)]
 
 
 # Derive fixed end-effector orientation from drawing pose via FK
