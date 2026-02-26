@@ -75,8 +75,9 @@ class DrawingConfig:
 
     # Motion parameters
     draw_speed: float = 0.2   # Speed factor for drawing (0-1)
-    move_speed: float = 0.3   # Speed factor for travel moves
-    interval: float = 0.01    # Fire-and-forget sleep interval (s)
+    move_speed: float = 0.2   # Speed factor for travel moves (same as draw)
+    pen_speed: float = 0.2    # Speed factor for pen raise/lower (same as draw)
+    interval: float = 0.02    # Fire-and-forget sleep interval (s)
 
     # Workspace limits (safety bounds in meters)
     x_min: float = 0.220
@@ -84,8 +85,14 @@ class DrawingConfig:
     y_min: float = -0.10
     y_max: float = 0.10
 
+    # Retract direction (-X) speed scaling
+    retract_speed_scale: float = 1  # Speed multiplier when moving toward base (-X)
+
+    # Joint feedback
+    feedback_interval: int = 10  # Read actual joints every N fire-and-forget steps
+
     # Interpolation
-    max_step_length: float = 0.002  # Auto-interpolate steps longer than this (m)
+    max_step_length: float = 0.001  # Auto-interpolate steps longer than this (m)
 
 
 class DrawingController:
@@ -120,6 +127,7 @@ class DrawingController:
         self._y: float = 0.0
         self._writing: bool = False
         self._current_joints: Optional[List[float]] = None
+        self._step_count: int = 0
 
     # -------------------------------------------------------------------------
     # Public API
@@ -176,10 +184,7 @@ class DrawingController:
         """Lift pen at current position (idempotent)."""
         if not self._writing:
             return True
-        success = self._move_to_xyz(
-            self._x, self._y, self.config.safe_z,
-            speed=self.config.move_speed,
-        )
+        success = self._move_z_linear(self.config.safe_z)
         if success:
             self._writing = False
         return success
@@ -188,10 +193,7 @@ class DrawingController:
         """Lower pen at current position (idempotent)."""
         if self._writing:
             return True
-        success = self._move_to_xyz(
-            self._x, self._y, self.config.draw_z,
-            speed=self.config.move_speed,
-        )
+        success = self._move_z_linear(self.config.draw_z)
         if success:
             self._writing = True
         return success
@@ -332,10 +334,61 @@ class DrawingController:
             )
         else:
             time.sleep(self.config.interval)
+            # Periodically read actual joint positions to correct drift
+            self._step_count += 1
+            if self._step_count % self.config.feedback_interval == 0:
+                self._current_joints = list(self.reader.read_joints().positions)
 
         self._x = x
         self._y = y
         return True
+
+    def _move_z_linear(self, z: float) -> bool:
+        """Move vertically to *z* using MoveL (Cartesian linear interpolation).
+
+        Guarantees a pure Z motion — no XY drift — by using the firmware's
+        linear interpolation mode instead of joint-space interpolation.
+
+        Also runs IK to keep ``_current_joints`` in sync so that subsequent
+        ``_draw_to`` calls start with a good initial guess.
+
+        Args:
+            z: Target Z height in meters.
+
+        Returns:
+            True if the move completed within timeout.
+        """
+        # Update IK state (joint guess) without sending a joint command
+        current_joints = self._get_current_joints()
+        result = inverse_kinematics(
+            target_x=self._x,
+            target_y=self._y,
+            target_z=z,
+            target_roll=DRAW_ROLL,
+            target_pitch=DRAW_PITCH,
+            target_yaw=DRAW_YAW,
+            initial_guess=current_joints,
+            config=IK_CFG,
+        )
+        if result.converged:
+            self._current_joints = result.joint_angles
+        else:
+            print(f"  [IK WARN] _move_z_linear z={z:.3f} IK did not converge, joint guess not updated")
+
+        # Send MoveL command (firmware Cartesian linear interpolation)
+        self.motion.move_linear(
+            self._x, self._y, z,
+            DRAW_ROLL, DRAW_PITCH, DRAW_YAW,
+            speed_factor=self.config.pen_speed,
+        )
+
+        # Wait for Cartesian pose to arrive
+        return self.reader.wait_for_pose(
+            self._x, self._y, z,
+            DRAW_ROLL, DRAW_PITCH, DRAW_YAW,
+            tolerance_m=0.005,
+            timeout_sec=10.0,
+        )
 
     def _travel_to(self, x: float, y: float) -> bool:
         """
@@ -372,8 +425,16 @@ class DrawingController:
         dy = y - self._y
         dist = math.sqrt(dx * dx + dy * dy)
 
+        # Adaptive speed: slow down when retracting toward base (-X)
+        # to counteract gravity-assisted overshoot on J2
+        speed = self.config.draw_speed
+        if dx < 0:
+            speed *= self.config.retract_speed_scale
+
         if dist <= self.config.max_step_length:
-            return self._move_to_xyz(x, y, self.config.draw_z, wait=False)
+            return self._move_to_xyz(
+                x, y, self.config.draw_z, speed=speed, wait=False,
+            )
 
         # Auto-interpolate: split into ceil(dist / max_step) segments
         num_steps = math.ceil(dist / self.config.max_step_length)
@@ -382,6 +443,8 @@ class DrawingController:
             t = i / num_steps
             ix = start_x + dx * t
             iy = start_y + dy * t
-            if not self._move_to_xyz(ix, iy, self.config.draw_z, wait=False):
+            if not self._move_to_xyz(
+                ix, iy, self.config.draw_z, speed=speed, wait=False,
+            ):
                 return False
         return True
