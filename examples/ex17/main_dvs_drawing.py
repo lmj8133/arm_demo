@@ -103,6 +103,7 @@ class DVSDrawingThread:
         scale: int = 3,
         canvas_size: int = 400,
         idle_clear: float = 0,
+        write_confirm: int = 1,
     ):
         self._xe_cam = xe_cam
         self._tracker = tracker
@@ -119,7 +120,8 @@ class DVSDrawingThread:
         self._fps = 0.0
 
         # Canvas owned by this thread, updated at ~200fps
-        self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear)
+        self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear,
+                                        write_confirm=write_confirm)
         self._canvas_lock = threading.Lock()
         # Main thread can toggle tracking on/off
         self._tracking_enabled = True
@@ -698,7 +700,7 @@ def main():
     dvs_drawing = DVSDrawingThread(
         xe_cam, dvs_tracker, dvs_homography, bridge,
         scale=args.scale, canvas_size=args.canvas_size,
-        idle_clear=args.idle_clear,
+        idle_clear=args.idle_clear, write_confirm=3,
     )
     dvs_drawing.start()
 
@@ -788,7 +790,7 @@ def main():
                 dvs_drawing = DVSDrawingThread(
                     xe_cam, dvs_tracker, dvs_homography, bridge,
                     scale=args.scale, canvas_size=args.canvas_size,
-                    idle_clear=args.idle_clear,
+                    idle_clear=args.idle_clear, write_confirm=3,
                 )
                 dvs_drawing.tracking_enabled = tracking_enabled
                 dvs_drawing.start()

@@ -31,3 +31,12 @@ piper_sdk/
 # Generated calibration profiles
 laser_profile.json
 dvs_calibration.json
+
+# Local runtime / experiments / data
+.run-piper/
+XenReal Original_screenshot_11.02.2026.png
+app-piper-speed/
+app/
+frame/
+recordings/
+tmp

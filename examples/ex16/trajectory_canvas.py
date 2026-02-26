@@ -22,7 +22,7 @@ class TrajectoryCanvas:
     """
 
     def __init__(self, size: int = 600, margin: int = 40,
-                 idle_clear: float = 0):
+                 idle_clear: float = 0, write_confirm: int = 1):
         self._size = size
         self._margin = margin
         self._draw_size = size - 2 * margin
@@ -35,6 +35,10 @@ class TrajectoryCanvas:
         self._idle_clear = idle_clear
         self._last_write_time: float = time.time()
         self._pending_clear = False
+        # Consecutive write=True frames required to reset idle timer.
+        # Prevents sporadic DVS noise from blocking idle_clear.
+        self._write_confirm = max(1, write_confirm)
+        self._write_streak = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -49,8 +53,10 @@ class TrajectoryCanvas:
             ny: Normalized y coordinate (0-1, bottom to top).
         """
         if write:
+            self._write_streak += 1
             self._cursor = (nx, ny)
-            self._last_write_time = time.time()
+            if self._write_streak >= self._write_confirm:
+                self._last_write_time = time.time()
             if not self._pen_down:
                 # Pen-down transition: clear old strokes if pending
                 if self._pending_clear:
@@ -61,6 +67,7 @@ class TrajectoryCanvas:
             else:
                 self._current_stroke.append((nx, ny))
         else:
+            self._write_streak = 0
             if self._pen_down:
                 # Finish current stroke
                 if len(self._current_stroke) >= 2:
