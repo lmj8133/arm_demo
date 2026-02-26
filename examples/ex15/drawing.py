@@ -80,10 +80,10 @@ class DrawingConfig:
     interval: float = 0.02    # Fire-and-forget sleep interval (s)
 
     # Workspace limits (safety bounds in meters)
-    x_min: float = 0.220
-    x_max: float = 0.420
-    y_min: float = -0.10
-    y_max: float = 0.10
+    x_min: float = 0.230
+    x_max: float = 0.410
+    y_min: float = -0.09
+    y_max: float = 0.09
 
     # Retract direction (-X) speed scaling
     retract_speed_scale: float = 1  # Speed multiplier when moving toward base (-X)
