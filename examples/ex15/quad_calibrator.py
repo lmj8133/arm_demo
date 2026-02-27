@@ -75,15 +75,21 @@ def warp_point(matrix: np.ndarray, x: float, y: float) -> Tuple[float, float]:
     return float(warped[0, 0, 0]), float(warped[0, 0, 1])
 
 
-def save_calibration(corners: np.ndarray, path: str) -> None:
-    """Save quad corners to JSON file."""
+def save_calibration(corners: np.ndarray, path: str) -> bool:
+    """Save quad corners to JSON file. Returns True on success."""
     data = {
         "corners": corners.tolist(),
         "dvs_width": DVS_WIDTH,
         "dvs_height": DVS_HEIGHT,
     }
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        return True
+    except OSError as e:
+        print(f"[CAL] Failed to save calibration: {e}")
+        return False
 
 
 def load_calibration(path: str) -> np.ndarray:
