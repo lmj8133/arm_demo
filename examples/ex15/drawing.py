@@ -62,7 +62,7 @@ IK_CFG = IKConfig(
 )
 
 # Home joint angles for safe shutdown (editable)
-SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+SAFE_HOME_JOINTS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.01389]
 
 
 @dataclass
