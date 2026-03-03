@@ -119,9 +119,10 @@ WINDOW_NAME = "DVS vs RGB Compare"
 class DVSReaderThread:
     """Background thread that reads DVS frames at native rate (~200fps).
 
-    Owns a TrajectoryCanvas internally so that canvas.update() runs at the
-    full DVS frame rate (~200fps) instead of the main-loop rate (~30fps).
-    The main thread calls render_canvas() / clear_canvas() for display.
+    Uses a TrajectoryCanvas (injected or self-created) so that
+    canvas.update() runs at the full DVS frame rate (~200fps) instead of
+    the main-loop rate (~30fps).  The main thread calls render_canvas() /
+    clear_canvas() for display.
     """
 
     def __init__(
@@ -133,6 +134,8 @@ class DVSReaderThread:
         canvas_size: int = 400,
         idle_clear: float = 0,
         write_confirm: int = 1,
+        canvas: Optional["TrajectoryCanvas"] = None,
+        canvas_lock: Optional[threading.Lock] = None,
     ):
         self._xe_cam = xe_cam
         self._tracker = tracker
@@ -147,12 +150,20 @@ class DVSReaderThread:
         self._thread: Optional[threading.Thread] = None
         self._fps = 0.0
 
-        # Canvas owned by this thread, updated at ~200fps
-        self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear,
-                                        write_confirm=write_confirm)
-        self._canvas_lock = threading.Lock()
+        # Canvas: use injected (persistent) or create own (standalone)
+        if canvas is not None:
+            self._canvas = canvas
+            self._canvas_lock = canvas_lock or threading.Lock()
+        else:
+            self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear,
+                                            write_confirm=write_confirm)
+            self._canvas_lock = threading.Lock()
         # Main thread can toggle tracking on/off
         self._tracking_enabled = True
+
+        # Optional arm bridge (set via set_bridge)
+        self._bridge = None
+        self._last_was_writing = False
 
     def start(self) -> None:
         """Start the background reader thread."""
@@ -198,6 +209,14 @@ class DVSReaderThread:
     def tracking_enabled(self, value: bool) -> None:
         self._tracking_enabled = value
 
+    def set_bridge(self, bridge) -> None:
+        """Enable/disable arm bridge push (thread-safe)."""
+        if bridge is None and self._bridge is not None:
+            # Send final pen-up before disconnecting
+            self._bridge.put(False, 0.0, 0.0)
+        self._bridge = bridge
+        self._last_was_writing = False
+
     def _run(self) -> None:
         """Reader loop: capture frames, run tracker, store results."""
         fps_frames = 0
@@ -235,6 +254,16 @@ class DVSReaderThread:
                     self._canvas.update(True, nx, ny)
                 else:
                     self._canvas.update(False, 0.0, 0.0)
+
+            # Optional bridge push (pen-up flood prevention)
+            bridge = self._bridge  # local ref for thread safety
+            if bridge is not None:
+                if self._tracking_enabled and warped is not None:
+                    bridge.put(True, 1.0 - warped[1], warped[0])
+                    self._last_was_writing = True
+                elif self._last_was_writing:
+                    bridge.put(False, 0.0, 0.0)
+                    self._last_was_writing = False
 
             # FPS counter
             fps_frames += 1

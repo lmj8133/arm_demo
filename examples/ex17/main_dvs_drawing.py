@@ -90,8 +90,9 @@ class DVSDrawingThread:
     """Background thread that reads DVS frames at native rate (~200fps).
 
     Like DVSReaderThread but additionally calls bridge.put() on every frame
-    so that no high-frequency detail is lost.  Pen-up flood prevention:
-    only one pen-up command is sent on the writing→idle transition.
+    so that no high-frequency detail is lost.  Uses a TrajectoryCanvas
+    (injected or self-created).  Pen-up flood prevention: only one pen-up
+    command is sent on the writing→idle transition.
     """
 
     def __init__(
@@ -104,6 +105,8 @@ class DVSDrawingThread:
         canvas_size: int = 400,
         idle_clear: float = 0,
         write_confirm: int = 1,
+        canvas: Optional["TrajectoryCanvas"] = None,
+        canvas_lock: Optional[threading.Lock] = None,
     ):
         self._xe_cam = xe_cam
         self._tracker = tracker
@@ -119,10 +122,14 @@ class DVSDrawingThread:
         self._thread: Optional[threading.Thread] = None
         self._fps = 0.0
 
-        # Canvas owned by this thread, updated at ~200fps
-        self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear,
-                                        write_confirm=write_confirm)
-        self._canvas_lock = threading.Lock()
+        # Canvas: use injected (persistent) or create own (standalone)
+        if canvas is not None:
+            self._canvas = canvas
+            self._canvas_lock = canvas_lock or threading.Lock()
+        else:
+            self._canvas = TrajectoryCanvas(size=canvas_size, idle_clear=idle_clear,
+                                            write_confirm=write_confirm)
+            self._canvas_lock = threading.Lock()
         # Main thread can toggle tracking on/off
         self._tracking_enabled = True
         # Pen-up flood prevention
