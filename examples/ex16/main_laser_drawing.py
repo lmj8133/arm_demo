@@ -217,7 +217,8 @@ class ArmThread:
 # ---------------------------------------------------------------------------
 
 
-def draw_quad(frame: np.ndarray, target: QuadTarget) -> None:
+def draw_quad(frame: np.ndarray, target: QuadTarget,
+              active_idx: int | None = None) -> None:
     """Draw quadrilateral annotation on frame."""
     corners = target.corners.astype(int)
 
@@ -228,10 +229,13 @@ def draw_quad(frame: np.ndarray, target: QuadTarget) -> None:
         cv2.line(frame, p1, p2, (0, 255, 0), 2)
 
     # Draw corners with labels
-    for label, (x, y) in target.corner_labels():
+    for i, (label, (x, y)) in enumerate(target.corner_labels()):
         color = CORNER_COLORS[label]
-        cv2.circle(frame, (x, y), 6, color, -1)
-        cv2.circle(frame, (x, y), 8, color, 2)
+        is_active = (i == active_idx)
+        radius_fill = 9 if is_active else 6
+        radius_ring = 11 if is_active else 8
+        cv2.circle(frame, (x, y), radius_fill, color, -1)
+        cv2.circle(frame, (x, y), radius_ring, color, 2)
         cv2.putText(
             frame, label, (x + 10, y - 10),
             cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2,
