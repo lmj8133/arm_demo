@@ -56,15 +56,15 @@ def compute_homography(corners: np.ndarray) -> np.ndarray:
     """Compute perspective transform from quad corners to unit square.
 
     Args:
-        corners: (4, 2) array ordered [TL, TR, BR, BL] in pixel coords.
+        corners: (4, 2) array ordered [TL, TR, BR, BL] in *rotated* pixel coords.
 
     Returns:
         3x3 homography matrix mapping pixel coords to unit square.
-        Origin at bottom-left (BL=0,0), x-right, y-up.
+        Origin at bottom-left (BL=0,0), x-right, y-up — same as RGB.
     """
     src = np.asarray(corners, dtype=np.float32).reshape(4, 2)
-    # BL(0,0) TL(1,0) BR(0,1) TR(1,1) — x=vertical(bottom→top), y=horizontal(left→right)
-    dst = np.array([[1, 0], [1, 1], [0, 1], [0, 0]], dtype=np.float32)
+    # TL(0,1) TR(1,1) BR(1,0) BL(0,0) — x-right, y-up, same as RGB calibration_store
+    dst = np.array([[0, 1], [1, 1], [1, 0], [0, 0]], dtype=np.float32)
     return cv2.getPerspectiveTransform(src, dst)
 
 
@@ -111,11 +111,11 @@ def load_calibration(path: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def default_corners(
-    width: int = DVS_WIDTH,
-    height: int = DVS_HEIGHT,
+    width: int = DVS_HEIGHT,
+    height: int = DVS_WIDTH,
     margin: float = 0.20,
 ) -> np.ndarray:
-    """Return default quad corners inset by *margin* fraction."""
+    """Return default quad corners inset by *margin* fraction (rotated space: w=160, h=164)."""
     mx = width * margin
     my = height * margin
     return np.array([
@@ -127,9 +127,9 @@ def default_corners(
 
 
 def grab_gray_frame(xe_cam) -> Optional[np.ndarray]:
-    """Capture one hybrid RGB frame (gray channel) from xe_cam.
+    """Capture one hybrid RGB frame (gray channel) from xe_cam, rotated.
 
-    Returns (H, W) uint8 grayscale, or None on failure.
+    Returns (DVS_WIDTH, DVS_HEIGHT) uint8 grayscale (rotated space), or None.
     """
     try:
         _dvs, gray = xe_cam.g_cap.XeGetFrame(
@@ -140,7 +140,10 @@ def grab_gray_frame(xe_cam) -> Optional[np.ndarray]:
         # gray comes as flat or (H, W); reshape if needed
         if gray.ndim == 1:
             gray = gray.reshape((DVS_HEIGHT, DVS_WIDTH))
-        return gray.astype(np.uint8)
+        gray = gray.astype(np.uint8)
+        gray = cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        gray = cv2.flip(gray, 1)
+        return gray
     except Exception:
         return None
 
@@ -221,9 +224,9 @@ def run_quad_calibration(
                 dragging_idx = idx
 
         elif event == cv2.EVENT_MOUSEMOVE and dragging_idx is not None:
-            # Clamp to DVS pixel range
-            nx = np.clip(mx / scale, 0, DVS_WIDTH - 1)
-            ny = np.clip(my / scale, 0, DVS_HEIGHT - 1)
+            # Clamp to rotated DVS pixel range (w=DVS_HEIGHT, h=DVS_WIDTH)
+            nx = np.clip(mx / scale, 0, DVS_HEIGHT - 1)
+            ny = np.clip(my / scale, 0, DVS_WIDTH - 1)
             corners[dragging_idx] = [nx, ny]
 
         elif event == cv2.EVENT_LBUTTONUP:
@@ -235,16 +238,19 @@ def run_quad_calibration(
     print("[CAL] Quad calibration started")
     print("[CAL] Drag corners to adjust.  [Enter] confirm | [R] reset | [Q/Esc] cancel")
 
+    # Rotated dimensions: width=DVS_HEIGHT, height=DVS_WIDTH
+    rot_w, rot_h = DVS_HEIGHT, DVS_WIDTH
+
     while True:
         gray = grab_gray_frame(xe_cam)
         if gray is None:
-            # Fallback: black frame
-            gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
+            # Fallback: black frame (rotated space)
+            gray = np.zeros((rot_h, rot_w), dtype=np.uint8)
 
         # Upscale to display
         bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         display = cv2.resize(
-            bgr, (DVS_WIDTH * scale, DVS_HEIGHT * scale),
+            bgr, (rot_w * scale, rot_h * scale),
             interpolation=cv2.INTER_NEAREST,
         )
 

@@ -485,14 +485,14 @@ def main():
     if not args.hand:
         from dvs_laser_tracker import DVSLaserTracker
         tracker = DVSLaserTracker(
-            width=DVS_WIDTH,
-            height=DVS_HEIGHT,
+            width=DVS_HEIGHT,
+            height=DVS_WIDTH,
             noise_mask_path=args.noise_mask,
         )
     else:
         tracker = DVSTracker(
-            width=DVS_WIDTH,
-            height=DVS_HEIGHT,
+            width=DVS_HEIGHT,
+            height=DVS_WIDTH,
             consecutive=args.consecutive,
             min_active_ratio=args.min_active,
             min_roi_size=args.min_roi_size,

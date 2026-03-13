@@ -227,7 +227,11 @@ class DVSReaderThread:
             if event_frame is None:
                 continue
 
-            # Track laser spot
+            # Rotate to match display convention (CCW 90° + flip H)
+            event_frame = cv2.rotate(event_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            event_frame = cv2.flip(event_frame, 1)
+
+            # Track laser spot (in rotated space)
             target = self._tracker.detect_from_events(event_frame)
 
             # Compute warped coordinate
@@ -248,9 +252,9 @@ class DVSReaderThread:
                     else:
                         self._canvas.update(False, 0.0, 0.0)  # outside bounds → pen up
                 elif target is not None:
-                    # No calibration — fallback to simple normalization
-                    nx = target.cx / DVS_WIDTH
-                    ny = 1.0 - (target.cy / DVS_HEIGHT)
+                    # No calibration — fallback (rotated: w=DVS_HEIGHT, h=DVS_WIDTH)
+                    nx = target.cx / DVS_HEIGHT
+                    ny = 1.0 - (target.cy / DVS_WIDTH)
                     self._canvas.update(True, nx, ny)
                 else:
                     self._canvas.update(False, 0.0, 0.0)
@@ -434,8 +438,9 @@ def run_dual_calibration(
     dragging_idx: Optional[int] = None
     hit_radius = 15  # px in display space
 
-    dvs_panel_w = DVS_WIDTH * scale
-    dvs_panel_h = DVS_HEIGHT * scale
+    # Rotated: width=DVS_HEIGHT, height=DVS_WIDTH
+    dvs_panel_w = DVS_HEIGHT * scale
+    dvs_panel_h = DVS_WIDTH * scale
     sep_w = 2  # separator width
 
     # Initial RGB quad detection
@@ -461,8 +466,9 @@ def run_dual_calibration(
                 dragging_idx = idx
 
         elif event == cv2.EVENT_MOUSEMOVE and dragging_idx is not None:
-            nx = np.clip(mx / scale, 0, DVS_WIDTH - 1)
-            ny = np.clip(my / scale, 0, DVS_HEIGHT - 1)
+            # Rotated space: w=DVS_HEIGHT, h=DVS_WIDTH
+            nx = np.clip(mx / scale, 0, DVS_HEIGHT - 1)
+            ny = np.clip(my / scale, 0, DVS_WIDTH - 1)
             corners[dragging_idx] = [nx, ny]
 
         elif event == cv2.EVENT_LBUTTONUP:
@@ -478,10 +484,10 @@ def run_dual_calibration(
     separator = np.zeros((dvs_panel_h, sep_w, 3), dtype=np.uint8)
 
     while True:
-        # --- DVS panel ---
+        # --- DVS panel (grab_gray_frame returns rotated) ---
         gray = dvs_grab_gray_frame(xe_cam)
         if gray is None:
-            gray = np.zeros((DVS_HEIGHT, DVS_WIDTH), dtype=np.uint8)
+            gray = np.zeros((DVS_WIDTH, DVS_HEIGHT), dtype=np.uint8)
 
         bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         dvs_panel = cv2.resize(
@@ -728,8 +734,8 @@ def main():
 
     # Create DVS tracker
     dvs_tracker = DVSLaserTracker(
-        width=DVS_WIDTH,
-        height=DVS_HEIGHT,
+        width=DVS_HEIGHT,
+        height=DVS_WIDTH,
         noise_mask_path=args.noise_mask,
     )
     print(f"[DVS] Tracker: {dvs_tracker}")
@@ -846,9 +852,9 @@ def main():
                 dvs_display = dvs_frame_to_bgr(dvs_event_frame, scale=args.scale)
                 draw_dvs_target_scaled(dvs_display, dvs_target, scale=args.scale)
             else:
-                # Placeholder while waiting for first DVS frame
+                # Placeholder while waiting for first DVS frame (rotated)
                 dvs_display = np.zeros(
-                    (DVS_HEIGHT * args.scale, DVS_WIDTH * args.scale, 3),
+                    (DVS_WIDTH * args.scale, DVS_HEIGHT * args.scale, 3),
                     dtype=np.uint8,
                 )
                 cv2.putText(dvs_display, "DVS: waiting...", (10, 30),

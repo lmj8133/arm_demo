@@ -189,7 +189,11 @@ class DVSDrawingThread:
             if event_frame is None:
                 continue
 
-            # Track laser spot
+            # Rotate to match display convention (CCW 90° + flip H)
+            event_frame = cv2.rotate(event_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            event_frame = cv2.flip(event_frame, 1)
+
+            # Track laser spot (in rotated space)
             target = self._tracker.detect_from_events(event_frame)
 
             # Compute warped coordinate
@@ -209,8 +213,9 @@ class DVSDrawingThread:
                     else:
                         self._canvas.update(False, 0.0, 0.0)
                 elif target is not None:
-                    nx = target.cx / DVS_WIDTH
-                    ny = 1.0 - (target.cy / DVS_HEIGHT)
+                    # No calibration — fallback (rotated: w=DVS_HEIGHT, h=DVS_WIDTH)
+                    nx = target.cx / DVS_HEIGHT
+                    ny = 1.0 - (target.cy / DVS_WIDTH)
                     self._canvas.update(True, nx, ny)
                 else:
                     self._canvas.update(False, 0.0, 0.0)
@@ -571,8 +576,8 @@ def main():
 
     # Create DVS laser tracker
     dvs_tracker = DVSLaserTracker(
-        width=DVS_WIDTH,
-        height=DVS_HEIGHT,
+        width=DVS_HEIGHT,
+        height=DVS_WIDTH,
         noise_mask_path=args.noise_mask,
     )
     print(f"[OK] Tracker: {dvs_tracker}")
